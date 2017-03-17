@@ -40,9 +40,15 @@ func (l *listener) Accept() (tpt.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &conn{
-		quicConn:  c,
-		transport: l.transport,
+
+	mnc, err := manet.WrapNetConn(c)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tpt.ConnWrap{
+		Conn: mnc,
+		Tpt:  l.transport,
 	}, nil
 }
 
