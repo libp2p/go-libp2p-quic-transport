@@ -1,6 +1,7 @@
 package libp2pquic
 
 import (
+	"fmt"
 	"sync"
 
 	pstore "github.com/libp2p/go-libp2p-peerstore"
@@ -33,7 +34,10 @@ func (t *QuicTransport) Dialer(laddr ma.Multiaddr, opts ...tpt.DialOpt) (tpt.Dia
 
 // Listen starts listening on laddr
 func (t *QuicTransport) Listen(laddr ma.Multiaddr) (tpt.Listener, error) {
-	// TODO: check if laddr is actually a QUIC address
+	if !t.Matches(laddr) {
+		return nil, fmt.Errorf("quic transport cannot listen on %q", laddr)
+	}
+
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
