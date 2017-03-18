@@ -6,6 +6,7 @@ import (
 	pstore "github.com/libp2p/go-libp2p-peerstore"
 	tpt "github.com/libp2p/go-libp2p-transport"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/whyrusleeping/mafmt"
 )
 
 // QuicTransport implements a QUIC Transport
@@ -50,8 +51,8 @@ func (t *QuicTransport) Listen(laddr ma.Multiaddr) (tpt.Listener, error) {
 	return ln, nil
 }
 
-func (t *QuicTransport) Matches(ma.Multiaddr) bool {
-	panic("not implemented")
+func (t *QuicTransport) Matches(a ma.Multiaddr) bool {
+	return mafmt.QUIC.Matches(a)
 }
 
 var _ tpt.Transport = &QuicTransport{}
