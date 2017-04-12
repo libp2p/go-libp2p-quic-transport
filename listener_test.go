@@ -54,7 +54,7 @@ var _ = Describe("Listener", func() {
 	It("returns its addr", func() {
 		laddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/12345/quic")
 		Expect(err).ToNot(HaveOccurred())
-		l, err = newListener(laddr, nil, nil)
+		l, err = newListener(laddr, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(l.Addr().String()).To(Equal("127.0.0.1:12345"))
 	})
@@ -62,7 +62,7 @@ var _ = Describe("Listener", func() {
 	It("returns its multiaddr", func() {
 		laddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/12346/quic")
 		Expect(err).ToNot(HaveOccurred())
-		l, err = newListener(laddr, nil, nil)
+		l, err = newListener(laddr, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(l.Multiaddr().String()).To(Equal("/ip4/127.0.0.1/udp/12346/quic"))
 	})

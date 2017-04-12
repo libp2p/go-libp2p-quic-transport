@@ -3,7 +3,6 @@ package libp2pquic
 import (
 	"net"
 
-	pstore "github.com/libp2p/go-libp2p-peerstore"
 	tpt "github.com/libp2p/go-libp2p-transport"
 	testdata "github.com/lucas-clemente/quic-go/testdata"
 	quicconn "github.com/marten-seemann/quic-conn"
@@ -18,7 +17,7 @@ type listener struct {
 	transport tpt.Transport
 }
 
-func newListener(laddr ma.Multiaddr, peers pstore.Peerstore, transport tpt.Transport) (*listener, error) {
+func newListener(laddr ma.Multiaddr, transport tpt.Transport) (*listener, error) {
 	// we need to provide a certificate here
 	// use the demo certificate from quic-go
 	tlsConf := testdata.GetTLSConfig()

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 
-	pstore "github.com/libp2p/go-libp2p-peerstore"
 	tpt "github.com/libp2p/go-libp2p-transport"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/whyrusleeping/mafmt"
@@ -12,8 +11,6 @@ import (
 
 // QuicTransport implements a QUIC Transport
 type QuicTransport struct {
-	peers pstore.Peerstore
-
 	lmutex    sync.Mutex
 	listeners map[string]tpt.Listener
 
@@ -23,10 +20,9 @@ type QuicTransport struct {
 
 // NewQuicTransport creates a new QUIC Transport
 // it tracks dialers and listeners created
-func NewQuicTransport(peers pstore.Peerstore) *QuicTransport {
+func NewQuicTransport() *QuicTransport {
 	// utils.SetLogLevel(utils.LogLevelDebug)
 	return &QuicTransport{
-		peers:     peers,
 		listeners: make(map[string]tpt.Listener),
 		dialers:   make(map[string]tpt.Dialer),
 	}
@@ -69,7 +65,7 @@ func (t *QuicTransport) Listen(laddr ma.Multiaddr) (tpt.Listener, error) {
 		return l, nil
 	}
 
-	ln, err := newListener(laddr, t.peers, t)
+	ln, err := newListener(laddr, t)
 	if err != nil {
 		return nil, err
 	}

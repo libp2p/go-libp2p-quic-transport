@@ -29,7 +29,7 @@ var _ = Describe("Listener", func() {
 		var ln *listener
 		go func() {
 			defer GinkgoRecover()
-			ln, err = newListener(addr, nil, transport)
+			ln, err = newListener(addr, transport)
 			Expect(err).ToNot(HaveOccurred())
 			_, err = ln.Accept()
 			Expect(err).ToNot(HaveOccurred())

@@ -11,7 +11,7 @@ var _ = Describe("Transport", func() {
 	var t *QuicTransport
 
 	BeforeEach(func() {
-		t = NewQuicTransport(nil)
+		t = NewQuicTransport()
 	})
 
 	Context("listening", func() {
