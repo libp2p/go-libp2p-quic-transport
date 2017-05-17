@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 
 	tpt "github.com/libp2p/go-libp2p-transport"
-	quicconn "github.com/marten-seemann/quic-conn"
+	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
 	"github.com/whyrusleeping/mafmt"
@@ -14,6 +14,8 @@ import (
 type dialer struct {
 	transport tpt.Transport
 }
+
+var _ tpt.Dialer = &dialer{}
 
 func newDialer(transport tpt.Transport) (*dialer, error) {
 	return &dialer{
@@ -28,28 +30,20 @@ func (d *dialer) Dial(raddr ma.Multiaddr) (tpt.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := quicconn.Dial(host, tlsConf)
+
+	qsess, err := quic.DialAddr(host, &quic.Config{TLSConfig: tlsConf})
 	if err != nil {
 		return nil, err
 	}
 
-	mnc, err := manet.WrapNetConn(c)
-	if err != nil {
-		return nil, err
-	}
-
-	return &tpt.ConnWrap{
-		Conn: mnc,
-		Tpt:  d.transport,
-	}, nil
+	return newQuicConn(qsess, d.transport)
 }
 
 func (d *dialer) DialContext(ctx context.Context, raddr ma.Multiaddr) (tpt.Conn, error) {
+	// TODO: implement the ctx
 	return d.Dial(raddr)
 }
 
 func (d *dialer) Matches(a ma.Multiaddr) bool {
 	return mafmt.QUIC.Matches(a)
 }
-
-var _ tpt.Dialer = &dialer{}

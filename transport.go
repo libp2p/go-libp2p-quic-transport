@@ -18,6 +18,8 @@ type QuicTransport struct {
 	dialers map[string]tpt.Dialer
 }
 
+var _ tpt.Transport = &QuicTransport{}
+
 // NewQuicTransport creates a new QUIC Transport
 // it tracks dialers and listeners created
 func NewQuicTransport() *QuicTransport {

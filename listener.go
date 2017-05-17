@@ -4,53 +4,50 @@ import (
 	"net"
 
 	tpt "github.com/libp2p/go-libp2p-transport"
+	quic "github.com/lucas-clemente/quic-go"
 	testdata "github.com/lucas-clemente/quic-go/testdata"
-	quicconn "github.com/marten-seemann/quic-conn"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
 )
 
 type listener struct {
 	laddr        ma.Multiaddr
-	quicListener net.Listener
+	quicListener quic.Listener
 
 	transport tpt.Transport
 }
 
-func newListener(laddr ma.Multiaddr, transport tpt.Transport) (*listener, error) {
-	// we need to provide a certificate here
-	// use the demo certificate from quic-go
-	tlsConf := testdata.GetTLSConfig()
-	network, host, err := manet.DialArgs(laddr)
+var _ tpt.Listener = &listener{}
+
+func newListener(laddr ma.Multiaddr, t tpt.Transport) (*listener, error) {
+	qconf := &quic.Config{
+		// we need to provide a certificate here
+		// use the demo certificate from quic-go
+		TLSConfig: testdata.GetTLSConfig(),
+	}
+
+	_, host, err := manet.DialArgs(laddr)
 	if err != nil {
 		return nil, err
 	}
-	qln, err := quicconn.Listen(network, host, tlsConf)
+	qln, err := quic.ListenAddr(host, qconf)
 	if err != nil {
 		return nil, err
 	}
+
 	return &listener{
 		laddr:        laddr,
 		quicListener: qln,
-		transport:    transport,
+		transport:    t,
 	}, nil
 }
 
 func (l *listener) Accept() (tpt.Conn, error) {
-	c, err := l.quicListener.Accept()
+	sess, err := l.quicListener.Accept()
 	if err != nil {
 		return nil, err
 	}
-
-	mnc, err := manet.WrapNetConn(c)
-	if err != nil {
-		return nil, err
-	}
-
-	return &tpt.ConnWrap{
-		Conn: mnc,
-		Tpt:  l.transport,
-	}, nil
+	return newQuicConn(sess, l.transport)
 }
 
 func (l *listener) Close() error {
@@ -64,5 +61,3 @@ func (l *listener) Addr() net.Addr {
 func (l *listener) Multiaddr() ma.Multiaddr {
 	return l.laddr
 }
-
-var _ tpt.Listener = &listener{}
