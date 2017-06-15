@@ -4,7 +4,4 @@
 [![Linux Build Status](https://img.shields.io/travis/marten-seemann/libp2p-quic-transport/master.svg?style=flat-square&label=linux+build)](https://travis-ci.org/marten-seemann/libp2p-quic-transport)
 [![Code Coverage](https://img.shields.io/codecov/c/github/marten-seemann/libp2p-quic-transport/master.svg?style=flat-square)](https://codecov.io/gh/marten-seemann/libp2p-quic-transport/)
 
-This is an implementation of the libp2p transport using a single stream over QUIC.
-It is intended as a first demo using QUIC in IPFS.
-
-**It is not intended for production use.**
+This is an implementation of the [libp2p transport](https://github.com/libp2p/go-libp2p-transport/blob/master/transport.go) and the [libp2p stream muxer](https://github.com/libp2p/go-stream-muxer) using QUIC.
