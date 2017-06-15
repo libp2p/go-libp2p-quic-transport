@@ -27,8 +27,6 @@ func (m *mockQuicListener) Close() error                  { m.closed = true; ret
 func (m *mockQuicListener) Accept() (quic.Session, error) { return m.sessionToAccept, m.acceptErr }
 func (m *mockQuicListener) Addr() net.Addr                { panic("not implemented") }
 
-
-
 var _ = Describe("Listener", func() {
 	var (
 		l            *listener
@@ -46,19 +44,24 @@ var _ = Describe("Listener", func() {
 	})
 
 	It("returns its addr", func() {
-		laddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/12345/quic")
+		laddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
 		Expect(err).ToNot(HaveOccurred())
 		l, err = newListener(laddr, nil)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(l.Addr().String()).To(Equal("127.0.0.1:12345"))
+		as := l.Addr().String()
+		Expect(as).ToNot(Equal("127.0.0.1:0)"))
+		Expect(as).To(ContainSubstring("127.0.0.1:"))
 	})
 
 	It("returns its multiaddr", func() {
-		laddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/12346/quic")
+		laddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
 		Expect(err).ToNot(HaveOccurred())
 		l, err = newListener(laddr, nil)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(l.Multiaddr().String()).To(Equal("/ip4/127.0.0.1/udp/12346/quic"))
+		mas := l.Multiaddr().String()
+		Expect(mas).ToNot(Equal("/ip4/127.0.0.1/udp/0/quic"))
+		Expect(mas).To(ContainSubstring("/ip4/127.0.0.1/udp/"))
+		Expect(mas).To(ContainSubstring("/quic"))
 	})
 
 	It("closes", func() {

@@ -34,9 +34,13 @@ func newListener(laddr ma.Multiaddr, t tpt.Transport) (*listener, error) {
 	if err != nil {
 		return nil, err
 	}
+	addr, err := quicMultiAddress(qln.Addr())
+	if err != nil {
+		return nil, err
+	}
 
 	return &listener{
-		laddr:        laddr,
+		laddr:        addr,
 		quicListener: qln,
 		transport:    t,
 	}, nil
