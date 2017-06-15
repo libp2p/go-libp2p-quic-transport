@@ -42,11 +42,13 @@ var _ quic.Session = &mockQuicSession{}
 func (s *mockQuicSession) AcceptStream() (quic.Stream, error) {
 	return s.streamToAccept, s.streamAcceptErr
 }
-func (s *mockQuicSession) OpenStream() (quic.Stream, error)     { return s.streamToOpen, s.streamOpenErr }
-func (s *mockQuicSession) OpenStreamSync() (quic.Stream, error) { return s.streamToOpen, nil }
-func (s *mockQuicSession) Close(error) error                    { s.closed = true; return nil }
-func (s *mockQuicSession) LocalAddr() net.Addr                  { return s.localAddr }
-func (s *mockQuicSession) RemoteAddr() net.Addr                 { return s.remoteAddr }
+func (s *mockQuicSession) OpenStream() (quic.Stream, error) { return s.streamToOpen, s.streamOpenErr }
+func (s *mockQuicSession) OpenStreamSync() (quic.Stream, error) {
+	return s.streamToOpen, s.streamOpenErr
+}
+func (s *mockQuicSession) Close(error) error    { s.closed = true; return nil }
+func (s *mockQuicSession) LocalAddr() net.Addr  { return s.localAddr }
+func (s *mockQuicSession) RemoteAddr() net.Addr { return s.remoteAddr }
 
 var _ = Describe("Conn", func() {
 	var (

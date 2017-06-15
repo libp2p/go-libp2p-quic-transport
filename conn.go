@@ -52,8 +52,10 @@ func (c *quicConn) AcceptStream() (smux.Stream, error) {
 	return &quicStream{Stream: str}, nil
 }
 
+// OpenStream opens a new stream
+// It blocks until a new stream can be opened (when limited by the QUIC maximum stream limit)
 func (c *quicConn) OpenStream() (smux.Stream, error) {
-	str, err := c.sess.OpenStream()
+	str, err := c.sess.OpenStreamSync()
 	if err != nil {
 		return nil, err
 	}
