@@ -25,7 +25,8 @@ func (s *mockStream) StreamID() protocol.StreamID { return s.id }
 var _ quic.Stream = &mockStream{}
 
 type mockQuicSession struct {
-	closed bool
+	closed              bool
+	waitUntilClosedChan chan struct{} // close this chan to make WaitUntilClosed return
 
 	localAddr  net.Addr
 	remoteAddr net.Addr
@@ -49,6 +50,7 @@ func (s *mockQuicSession) OpenStreamSync() (quic.Stream, error) {
 func (s *mockQuicSession) Close(error) error    { s.closed = true; return nil }
 func (s *mockQuicSession) LocalAddr() net.Addr  { return s.localAddr }
 func (s *mockQuicSession) RemoteAddr() net.Addr { return s.remoteAddr }
+func (s *mockQuicSession) WaitUntilClosed()     { <-s.waitUntilClosedChan }
 
 var _ = Describe("Conn", func() {
 	var (
@@ -58,8 +60,9 @@ var _ = Describe("Conn", func() {
 
 	BeforeEach(func() {
 		sess = &mockQuicSession{
-			localAddr:  &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337},
-			remoteAddr: &net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1234},
+			localAddr:           &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337},
+			remoteAddr:          &net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1234},
+			waitUntilClosedChan: make(chan struct{}),
 		}
 		var err error
 		conn, err = newQuicConn(sess, nil)
@@ -80,6 +83,12 @@ var _ = Describe("Conn", func() {
 		err := conn.Close()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(sess.closed).To(BeTrue())
+	})
+
+	It("says if it is closed", func() {
+		Consistently(func() bool { return conn.IsClosed() }).Should(BeFalse())
+		close(sess.waitUntilClosedChan)
+		Eventually(func() bool { return conn.IsClosed() }).Should(BeTrue())
 	})
 
 	Context("opening streams", func() {

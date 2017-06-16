@@ -3,6 +3,7 @@ package libp2pquic
 import (
 	"fmt"
 	"net"
+	"sync"
 
 	smux "github.com/jbenet/go-stream-muxer"
 	tpt "github.com/libp2p/go-libp2p-transport"
@@ -12,11 +13,15 @@ import (
 )
 
 type quicConn struct {
+	mutex sync.RWMutex
+
 	sess      quic.Session
 	transport tpt.Transport
 
 	laddr ma.Multiaddr
 	raddr ma.Multiaddr
+
+	closed bool
 }
 
 var _ tpt.Conn = &quicConn{}
@@ -24,7 +29,6 @@ var _ tpt.MultiStreamConn = &quicConn{}
 
 func newQuicConn(sess quic.Session, t tpt.Transport) (*quicConn, error) {
 	// analogues to manet.WrapNetConn
-
 	laddr, err := quicMultiAddress(sess.LocalAddr())
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert nconn.LocalAddr: %s", err)
@@ -36,12 +40,16 @@ func newQuicConn(sess quic.Session, t tpt.Transport) (*quicConn, error) {
 		return nil, fmt.Errorf("failed to convert nconn.RemoteAddr: %s", err)
 	}
 
-	return &quicConn{
+	c := &quicConn{
 		sess:      sess,
 		laddr:     laddr,
 		raddr:     raddr,
 		transport: t,
-	}, nil
+	}
+
+	go c.watchClosed()
+
+	return c, nil
 }
 
 func (c *quicConn) AcceptStream() (smux.Stream, error) {
@@ -76,9 +84,17 @@ func (c *quicConn) Close() error {
 	return c.sess.Close(nil)
 }
 
-// TODO: implement this
+func (c *quicConn) watchClosed() {
+	c.sess.WaitUntilClosed()
+	c.mutex.Lock()
+	c.closed = true
+	c.mutex.Unlock()
+}
+
 func (c *quicConn) IsClosed() bool {
-	return false
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.closed
 }
 
 func (c *quicConn) LocalAddr() net.Addr {
