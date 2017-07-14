@@ -20,17 +20,13 @@ type listener struct {
 var _ tpt.Listener = &listener{}
 
 func newListener(laddr ma.Multiaddr, t tpt.Transport) (*listener, error) {
-	qconf := &quic.Config{
-		// we need to provide a certificate here
-		// use the demo certificate from quic-go
-		TLSConfig: testdata.GetTLSConfig(),
-	}
-
 	_, host, err := manet.DialArgs(laddr)
 	if err != nil {
 		return nil, err
 	}
-	qln, err := quic.ListenAddr(host, qconf)
+	// we need to provide a certificate here
+	// use the demo certificate from quic-go
+	qln, err := quic.ListenAddr(host, testdata.GetTLSConfig(), nil)
 	if err != nil {
 		return nil, err
 	}

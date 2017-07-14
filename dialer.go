@@ -25,13 +25,12 @@ func newDialer(transport tpt.Transport) (*dialer, error) {
 
 func (d *dialer) Dial(raddr ma.Multiaddr) (tpt.Conn, error) {
 	// TODO: check that raddr is a QUIC address
-	tlsConf := &tls.Config{InsecureSkipVerify: true}
 	_, host, err := manet.DialArgs(raddr)
 	if err != nil {
 		return nil, err
 	}
 
-	qsess, err := quic.DialAddr(host, &quic.Config{TLSConfig: tlsConf})
+	qsess, err := quic.DialAddr(host, &tls.Config{InsecureSkipVerify: true}, nil)
 	if err != nil {
 		return nil, err
 	}
