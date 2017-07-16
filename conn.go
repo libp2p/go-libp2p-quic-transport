@@ -46,28 +46,19 @@ func newQuicConn(sess quic.Session, t tpt.Transport) (*quicConn, error) {
 		raddr:     raddr,
 		transport: t,
 	}
-
 	go c.watchClosed()
 
 	return c, nil
 }
 
 func (c *quicConn) AcceptStream() (smux.Stream, error) {
-	str, err := c.sess.AcceptStream()
-	if err != nil {
-		return nil, err
-	}
-	return &quicStream{Stream: str}, nil
+	return c.sess.AcceptStream()
 }
 
 // OpenStream opens a new stream
 // It blocks until a new stream can be opened (when limited by the QUIC maximum stream limit)
 func (c *quicConn) OpenStream() (smux.Stream, error) {
-	str, err := c.sess.OpenStreamSync()
-	if err != nil {
-		return nil, err
-	}
-	return &quicStream{Stream: str}, nil
+	return c.sess.OpenStreamSync()
 }
 
 func (c *quicConn) Serve(handler smux.StreamHandler) {

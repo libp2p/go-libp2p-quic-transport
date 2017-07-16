@@ -3,6 +3,7 @@ package libp2pquic
 import (
 	"errors"
 	"net"
+	"time"
 
 	smux "github.com/jbenet/go-stream-muxer"
 	quic "github.com/lucas-clemente/quic-go"
@@ -16,11 +17,14 @@ type mockStream struct {
 	id protocol.StreamID
 }
 
-func (s *mockStream) Close() error                { return nil }
-func (s *mockStream) Reset(error)                 { return }
-func (s *mockStream) Read([]byte) (int, error)    { return 0, nil }
-func (s *mockStream) Write([]byte) (int, error)   { return 0, nil }
-func (s *mockStream) StreamID() protocol.StreamID { return s.id }
+func (s *mockStream) Close() error                     { return nil }
+func (s *mockStream) Reset(error)                      { return }
+func (s *mockStream) Read([]byte) (int, error)         { return 0, nil }
+func (s *mockStream) Write([]byte) (int, error)        { return 0, nil }
+func (s *mockStream) StreamID() protocol.StreamID      { return s.id }
+func (s *mockStream) SetReadDeadline(time.Time) error  { panic("not implemented") }
+func (s *mockStream) SetWriteDeadline(time.Time) error { panic("not implemented") }
+func (s *mockStream) SetDeadline(time.Time) error      { panic("not implemented") }
 
 var _ quic.Stream = &mockStream{}
 
@@ -97,7 +101,7 @@ var _ = Describe("Conn", func() {
 			sess.streamToOpen = s
 			str, err := conn.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str.(*quicStream).Stream).To(Equal(s))
+			Expect(str).To(Equal(s))
 		})
 
 		It("errors when it can't open a stream", func() {
@@ -114,7 +118,7 @@ var _ = Describe("Conn", func() {
 			sess.streamToAccept = s
 			str, err := conn.AcceptStream()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str.(*quicStream).Stream).To(Equal(s))
+			Expect(str).To(Equal(s))
 		})
 
 		It("errors when it can't open a stream", func() {
@@ -150,7 +154,7 @@ var _ = Describe("Conn", func() {
 				returned = true
 			}()
 			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
-			Expect(handlerCalledWith.(*quicStream).Stream).To(Equal(str))
+			Expect(handlerCalledWith).To(Equal(str))
 			// make the go-routine return
 			sess.streamAcceptErr = errors.New("stop test")
 		})
