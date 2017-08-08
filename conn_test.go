@@ -6,7 +6,6 @@ import (
 	"net"
 	"time"
 
-	smux "github.com/libp2p/go-stream-muxer"
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/protocol"
 
@@ -133,47 +132,4 @@ var _ = Describe("Conn", func() {
 			Expect(err).To(MatchError(testErr))
 		})
 	})
-
-	Context("serving", func() {
-		var (
-			handler           func(smux.Stream)
-			handlerCalled     bool
-			handlerCalledWith smux.Stream
-		)
-
-		BeforeEach(func() {
-			handlerCalled = false
-			handlerCalledWith = nil
-			handler = func(s smux.Stream) {
-				handlerCalledWith = s
-				handlerCalled = true
-			}
-		})
-
-		It("calls the handler", func() {
-			str := &mockStream{id: 5}
-			sess.streamToAccept = str
-			var returned bool
-			go func() {
-				conn.Serve(handler)
-				returned = true
-			}()
-			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
-			Expect(handlerCalledWith.(*stream).Stream).To(Equal(str))
-			// make the go-routine return
-			sess.streamAcceptErr = errors.New("stop test")
-		})
-
-		It("returns when accepting a stream errors", func() {
-			sess.streamAcceptErr = errors.New("accept err")
-			var returned bool
-			go func() {
-				conn.Serve(handler)
-				returned = true
-			}()
-			Eventually(func() bool { return returned }).Should(BeTrue())
-			Expect(handlerCalled).To(BeFalse())
-		})
-	})
-
 })

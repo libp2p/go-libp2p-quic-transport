@@ -63,16 +63,6 @@ func (c *quicConn) OpenStream() (smux.Stream, error) {
 	return &stream{str}, err
 }
 
-func (c *quicConn) Serve(handler smux.StreamHandler) {
-	for { // accept loop
-		s, err := c.AcceptStream()
-		if err != nil {
-			return // err always means closed.
-		}
-		go handler(s)
-	}
-}
-
 func (c *quicConn) Close() error {
 	return c.sess.Close(nil)
 }
