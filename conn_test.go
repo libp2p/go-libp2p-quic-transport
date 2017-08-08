@@ -101,7 +101,7 @@ var _ = Describe("Conn", func() {
 			sess.streamToOpen = s
 			str, err := conn.OpenStream()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str).To(Equal(s))
+			Expect(str.(*stream).Stream).To(Equal(s))
 		})
 
 		It("errors when it can't open a stream", func() {
@@ -118,7 +118,7 @@ var _ = Describe("Conn", func() {
 			sess.streamToAccept = s
 			str, err := conn.AcceptStream()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(str).To(Equal(s))
+			Expect(str.(*stream).Stream).To(Equal(s))
 		})
 
 		It("errors when it can't open a stream", func() {
@@ -154,7 +154,7 @@ var _ = Describe("Conn", func() {
 				returned = true
 			}()
 			Eventually(func() bool { return handlerCalled }).Should(BeTrue())
-			Expect(handlerCalledWith).To(Equal(str))
+			Expect(handlerCalledWith.(*stream).Stream).To(Equal(str))
 			// make the go-routine return
 			sess.streamAcceptErr = errors.New("stop test")
 		})
