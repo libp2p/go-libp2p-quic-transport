@@ -78,7 +78,7 @@ func (c *quicConn) Close() error {
 }
 
 func (c *quicConn) watchClosed() {
-	c.sess.WaitUntilClosed()
+	<-c.sess.Context().Done()
 	c.mutex.Lock()
 	c.closed = true
 	c.mutex.Unlock()

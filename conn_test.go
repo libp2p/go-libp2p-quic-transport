@@ -1,6 +1,7 @@
 package libp2pquic
 
 import (
+	"context"
 	"errors"
 	"net"
 	"time"
@@ -25,12 +26,13 @@ func (s *mockStream) StreamID() protocol.StreamID      { return s.id }
 func (s *mockStream) SetReadDeadline(time.Time) error  { panic("not implemented") }
 func (s *mockStream) SetWriteDeadline(time.Time) error { panic("not implemented") }
 func (s *mockStream) SetDeadline(time.Time) error      { panic("not implemented") }
+func (s *mockStream) Context() context.Context         { panic("not implemented") }
 
 var _ quic.Stream = &mockStream{}
 
 type mockQuicSession struct {
-	closed              bool
-	waitUntilClosedChan chan struct{} // close this chan to make WaitUntilClosed return
+	closed  bool
+	context context.Context
 
 	localAddr  net.Addr
 	remoteAddr net.Addr
@@ -51,22 +53,25 @@ func (s *mockQuicSession) OpenStream() (quic.Stream, error) { return s.streamToO
 func (s *mockQuicSession) OpenStreamSync() (quic.Stream, error) {
 	return s.streamToOpen, s.streamOpenErr
 }
-func (s *mockQuicSession) Close(error) error    { s.closed = true; return nil }
-func (s *mockQuicSession) LocalAddr() net.Addr  { return s.localAddr }
-func (s *mockQuicSession) RemoteAddr() net.Addr { return s.remoteAddr }
-func (s *mockQuicSession) WaitUntilClosed()     { <-s.waitUntilClosedChan }
+func (s *mockQuicSession) Close(error) error        { s.closed = true; return nil }
+func (s *mockQuicSession) LocalAddr() net.Addr      { return s.localAddr }
+func (s *mockQuicSession) RemoteAddr() net.Addr     { return s.remoteAddr }
+func (s *mockQuicSession) Context() context.Context { return s.context }
 
 var _ = Describe("Conn", func() {
 	var (
-		conn *quicConn
-		sess *mockQuicSession
+		conn      *quicConn
+		sess      *mockQuicSession
+		ctxCancel context.CancelFunc
 	)
 
 	BeforeEach(func() {
+		var ctx context.Context
+		ctx, ctxCancel = context.WithCancel(context.Background())
 		sess = &mockQuicSession{
-			localAddr:           &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337},
-			remoteAddr:          &net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1234},
-			waitUntilClosedChan: make(chan struct{}),
+			localAddr:  &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337},
+			remoteAddr: &net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1234},
+			context:    ctx,
 		}
 		var err error
 		conn, err = newQuicConn(sess, nil)
@@ -91,7 +96,7 @@ var _ = Describe("Conn", func() {
 
 	It("says if it is closed", func() {
 		Consistently(func() bool { return conn.IsClosed() }).Should(BeFalse())
-		close(sess.waitUntilClosedChan)
+		ctxCancel()
 		Eventually(func() bool { return conn.IsClosed() }).Should(BeTrue())
 	})
 
