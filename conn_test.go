@@ -7,21 +7,20 @@ import (
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/lucas-clemente/quic-go/protocol"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 type mockStream struct {
-	id protocol.StreamID
+	id quic.StreamID
 }
 
 func (s *mockStream) Close() error                     { return nil }
 func (s *mockStream) Reset(error)                      { return }
 func (s *mockStream) Read([]byte) (int, error)         { return 0, nil }
 func (s *mockStream) Write([]byte) (int, error)        { return 0, nil }
-func (s *mockStream) StreamID() protocol.StreamID      { return s.id }
+func (s *mockStream) StreamID() quic.StreamID          { return s.id }
 func (s *mockStream) SetReadDeadline(time.Time) error  { panic("not implemented") }
 func (s *mockStream) SetWriteDeadline(time.Time) error { panic("not implemented") }
 func (s *mockStream) SetDeadline(time.Time) error      { panic("not implemented") }
