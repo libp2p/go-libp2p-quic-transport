@@ -25,7 +25,7 @@ type quicConn struct {
 }
 
 var _ tpt.Conn = &quicConn{}
-var _ tpt.MultiStreamConn = &quicConn{}
+var _ tpt.MultiplexConn = &quicConn{}
 
 func newQuicConn(sess quic.Session, t tpt.Transport) (*quicConn, error) {
 	// analogues to manet.WrapNetConn
