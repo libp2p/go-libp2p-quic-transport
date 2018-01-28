@@ -2,133 +2,92 @@ package libp2pquic
 
 import (
 	"context"
-	"errors"
-	"net"
-	"time"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 
-	quic "github.com/lucas-clemente/quic-go"
+	ic "github.com/libp2p/go-libp2p-crypto"
+	peer "github.com/libp2p/go-libp2p-peer"
+	tpt "github.com/libp2p/go-libp2p-transport"
+	ma "github.com/multiformats/go-multiaddr"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-type mockStream struct {
-	id quic.StreamID
-}
-
-func (s *mockStream) Close() error                     { return nil }
-func (s *mockStream) Reset(error)                      { return }
-func (s *mockStream) Read([]byte) (int, error)         { return 0, nil }
-func (s *mockStream) Write([]byte) (int, error)        { return 0, nil }
-func (s *mockStream) StreamID() quic.StreamID          { return s.id }
-func (s *mockStream) SetReadDeadline(time.Time) error  { panic("not implemented") }
-func (s *mockStream) SetWriteDeadline(time.Time) error { panic("not implemented") }
-func (s *mockStream) SetDeadline(time.Time) error      { panic("not implemented") }
-func (s *mockStream) Context() context.Context         { panic("not implemented") }
-
-var _ quic.Stream = &mockStream{}
-
-type mockQuicSession struct {
-	closed  bool
-	context context.Context
-
-	localAddr  net.Addr
-	remoteAddr net.Addr
-
-	streamToAccept  quic.Stream
-	streamAcceptErr error
-
-	streamToOpen  quic.Stream
-	streamOpenErr error
-}
-
-var _ quic.Session = &mockQuicSession{}
-
-func (s *mockQuicSession) AcceptStream() (quic.Stream, error) {
-	return s.streamToAccept, s.streamAcceptErr
-}
-func (s *mockQuicSession) OpenStream() (quic.Stream, error) { return s.streamToOpen, s.streamOpenErr }
-func (s *mockQuicSession) OpenStreamSync() (quic.Stream, error) {
-	return s.streamToOpen, s.streamOpenErr
-}
-func (s *mockQuicSession) Close(error) error        { s.closed = true; return nil }
-func (s *mockQuicSession) LocalAddr() net.Addr      { return s.localAddr }
-func (s *mockQuicSession) RemoteAddr() net.Addr     { return s.remoteAddr }
-func (s *mockQuicSession) Context() context.Context { return s.context }
-
-var _ = Describe("Conn", func() {
+var _ = Describe("Connection", func() {
 	var (
-		conn      *quicConn
-		sess      *mockQuicSession
-		ctxCancel context.CancelFunc
+		serverKey, clientKey ic.PrivKey
+		serverID, clientID   peer.ID
 	)
 
+	createPeer := func() ic.PrivKey {
+		key, err := rsa.GenerateKey(rand.Reader, 1024)
+		Expect(err).ToNot(HaveOccurred())
+		priv, err := ic.UnmarshalRsaPrivateKey(x509.MarshalPKCS1PrivateKey(key))
+		Expect(err).ToNot(HaveOccurred())
+		return priv
+	}
+
+	runServer := func() (<-chan ma.Multiaddr, <-chan tpt.Conn) {
+		serverTransport, err := NewTransport(serverKey)
+		Expect(err).ToNot(HaveOccurred())
+		addrChan := make(chan ma.Multiaddr)
+		connChan := make(chan tpt.Conn)
+		go func() {
+			defer GinkgoRecover()
+			addr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
+			Expect(err).ToNot(HaveOccurred())
+			ln, err := serverTransport.Listen(addr)
+			Expect(err).ToNot(HaveOccurred())
+			addrChan <- ln.Multiaddr()
+			conn, err := ln.Accept()
+			Expect(err).ToNot(HaveOccurred())
+			connChan <- conn
+		}()
+		return addrChan, connChan
+	}
+
 	BeforeEach(func() {
-		var ctx context.Context
-		ctx, ctxCancel = context.WithCancel(context.Background())
-		sess = &mockQuicSession{
-			localAddr:  &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1337},
-			remoteAddr: &net.UDPAddr{IP: net.IPv4(192, 168, 13, 37), Port: 1234},
-			context:    ctx,
-		}
 		var err error
-		conn, err = newQuicConn(sess, nil)
+		serverKey = createPeer()
+		serverID, err = peer.IDFromPrivateKey(serverKey)
+		Expect(err).ToNot(HaveOccurred())
+		clientKey = createPeer()
+		clientID, err = peer.IDFromPrivateKey(clientKey)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
-	It("has the correct local address", func() {
-		Expect(conn.LocalAddr()).To(Equal(sess.localAddr))
-		Expect(conn.LocalMultiaddr().String()).To(Equal("/ip4/127.0.0.1/udp/1337/quic"))
-	})
-
-	It("has the correct remote address", func() {
-		Expect(conn.RemoteAddr()).To(Equal(sess.remoteAddr))
-		Expect(conn.RemoteMultiaddr().String()).To(Equal("/ip4/192.168.13.37/udp/1234/quic"))
-	})
-
-	It("closes", func() {
-		err := conn.Close()
+	It("handshakes", func() {
+		serverAddrChan, serverConnChan := runServer()
+		clientTransport, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(sess.closed).To(BeTrue())
+		serverAddr := <-serverAddrChan
+		conn, err := clientTransport.Dial(context.Background(), serverAddr, serverID)
+		Expect(err).ToNot(HaveOccurred())
+		serverConn := <-serverConnChan
+		Expect(conn.LocalPeer()).To(Equal(clientID))
+		Expect(conn.LocalPrivateKey()).To(Equal(clientKey))
+		Expect(conn.RemotePeer()).To(Equal(serverID))
+		Expect(conn.RemotePublicKey()).To(Equal(serverKey.GetPublic()))
+		Expect(serverConn.LocalPeer()).To(Equal(serverID))
+		Expect(serverConn.LocalPrivateKey()).To(Equal(serverKey))
+		Expect(serverConn.RemotePeer()).To(Equal(clientID))
+		Expect(serverConn.RemotePublicKey()).To(Equal(clientKey.GetPublic()))
 	})
 
-	It("says if it is closed", func() {
-		Consistently(func() bool { return conn.IsClosed() }).Should(BeFalse())
-		ctxCancel()
-		Eventually(func() bool { return conn.IsClosed() }).Should(BeTrue())
-	})
+	It("fails if the peer ID doesn't match", func() {
+		thirdPartyID, err := peer.IDFromPrivateKey(createPeer())
+		Expect(err).ToNot(HaveOccurred())
 
-	Context("opening streams", func() {
-		It("opens streams", func() {
-			s := &mockStream{id: 1337}
-			sess.streamToOpen = s
-			str, err := conn.OpenStream()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.(*stream).Stream).To(Equal(s))
-		})
-
-		It("errors when it can't open a stream", func() {
-			testErr := errors.New("stream open err")
-			sess.streamOpenErr = testErr
-			_, err := conn.OpenStream()
-			Expect(err).To(MatchError(testErr))
-		})
-	})
-
-	Context("accepting streams", func() {
-		It("accepts streams", func() {
-			s := &mockStream{id: 1337}
-			sess.streamToAccept = s
-			str, err := conn.AcceptStream()
-			Expect(err).ToNot(HaveOccurred())
-			Expect(str.(*stream).Stream).To(Equal(s))
-		})
-
-		It("errors when it can't open a stream", func() {
-			testErr := errors.New("stream open err")
-			sess.streamAcceptErr = testErr
-			_, err := conn.AcceptStream()
-			Expect(err).To(MatchError(testErr))
-		})
+		serverAddrChan, _ := runServer()
+		clientTransport, err := NewTransport(clientKey)
+		Expect(err).ToNot(HaveOccurred())
+		serverAddr := <-serverAddrChan
+		// dial, but expect the wrong peer ID
+		_, err = clientTransport.Dial(context.Background(), serverAddr, thirdPartyID)
+		Expect(err).To(MatchError("peer IDs don't match"))
+		// TODO(#2): don't accept a connection if the client's peer verification fails
+		// Consistently(serverConnChan).ShouldNot(Receive())
 	})
 })

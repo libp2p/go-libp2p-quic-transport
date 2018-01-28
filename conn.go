@@ -1,10 +1,10 @@
 package libp2pquic
 
 import (
-	"fmt"
 	"net"
-	"sync"
 
+	ic "github.com/libp2p/go-libp2p-crypto"
+	peer "github.com/libp2p/go-libp2p-peer"
 	tpt "github.com/libp2p/go-libp2p-transport"
 	smux "github.com/libp2p/go-stream-muxer"
 	quic "github.com/lucas-clemente/quic-go"
@@ -12,96 +12,78 @@ import (
 	manet "github.com/multiformats/go-multiaddr-net"
 )
 
-type quicConn struct {
-	mutex sync.RWMutex
-
+type conn struct {
 	sess      quic.Session
 	transport tpt.Transport
 
-	laddr ma.Multiaddr
-	raddr ma.Multiaddr
+	localPeer      peer.ID
+	privKey        ic.PrivKey
+	localMultiaddr ma.Multiaddr
 
-	closed bool
+	remotePeerID    peer.ID
+	remotePubKey    ic.PubKey
+	remoteMultiaddr ma.Multiaddr
 }
 
-var _ tpt.Conn = &quicConn{}
-var _ tpt.MultiplexConn = &quicConn{}
+var _ tpt.Conn = &conn{}
 
-func newQuicConn(sess quic.Session, t tpt.Transport) (*quicConn, error) {
-	// analogues to manet.WrapNetConn
-	laddr, err := quicMultiAddress(sess.LocalAddr())
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert nconn.LocalAddr: %s", err)
-	}
-
-	// analogues to manet.WrapNetConn
-	raddr, err := quicMultiAddress(sess.RemoteAddr())
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert nconn.RemoteAddr: %s", err)
-	}
-
-	c := &quicConn{
-		sess:      sess,
-		laddr:     laddr,
-		raddr:     raddr,
-		transport: t,
-	}
-	go c.watchClosed()
-
-	return c, nil
-}
-
-func (c *quicConn) AcceptStream() (smux.Stream, error) {
-	str, err := c.sess.AcceptStream()
-	return &stream{str}, err
-}
-
-// OpenStream opens a new stream
-// It blocks until a new stream can be opened (when limited by the QUIC maximum stream limit)
-func (c *quicConn) OpenStream() (smux.Stream, error) {
-	str, err := c.sess.OpenStreamSync()
-	return &stream{str}, err
-}
-
-func (c *quicConn) Close() error {
+func (c *conn) Close() error {
 	return c.sess.Close(nil)
 }
 
-func (c *quicConn) watchClosed() {
-	<-c.sess.Context().Done()
-	c.mutex.Lock()
-	c.closed = true
-	c.mutex.Unlock()
+// IsClosed returns whether a connection is fully closed.
+func (c *conn) IsClosed() bool {
+	return c.sess.Context().Err() != nil
 }
 
-func (c *quicConn) IsClosed() bool {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	return c.closed
+// OpenStream creates a new stream.
+func (c *conn) OpenStream() (smux.Stream, error) {
+	qstr, err := c.sess.OpenStreamSync()
+	return &stream{Stream: qstr}, err
 }
 
-func (c *quicConn) LocalAddr() net.Addr {
-	return c.sess.LocalAddr()
+// AcceptStream accepts a stream opened by the other side.
+func (c *conn) AcceptStream() (smux.Stream, error) {
+	qstr, err := c.sess.AcceptStream()
+	return &stream{Stream: qstr}, err
 }
 
-func (c *quicConn) LocalMultiaddr() ma.Multiaddr {
-	return c.laddr
+// LocalPeer returns our peer ID
+func (c *conn) LocalPeer() peer.ID {
+	return c.localPeer
 }
 
-func (c *quicConn) RemoteAddr() net.Addr {
-	return c.sess.RemoteAddr()
+// LocalPrivateKey returns our private key
+func (c *conn) LocalPrivateKey() ic.PrivKey {
+	return c.privKey
 }
 
-func (c *quicConn) RemoteMultiaddr() ma.Multiaddr {
-	return c.raddr
+// RemotePeer returns the peer ID of the remote peer.
+func (c *conn) RemotePeer() peer.ID {
+	return c.remotePeerID
 }
 
-func (c *quicConn) Transport() tpt.Transport {
+// RemotePublicKey returns the public key of the remote peer.
+func (c *conn) RemotePublicKey() ic.PubKey {
+	return c.remotePubKey
+}
+
+// LocalMultiaddr returns the local Multiaddr associated
+func (c *conn) LocalMultiaddr() ma.Multiaddr {
+	return c.localMultiaddr
+}
+
+// RemoteMultiaddr returns the remote Multiaddr associated
+func (c *conn) RemoteMultiaddr() ma.Multiaddr {
+	return c.remoteMultiaddr
+}
+
+func (c *conn) Transport() tpt.Transport {
 	return c.transport
 }
 
 // TODO: there must be a better way to do this
-func quicMultiAddress(na net.Addr) (ma.Multiaddr, error) {
+func quicMultiaddr(na net.Addr) (ma.Multiaddr, error) {
 	udpMA, err := manet.FromNetAddr(na)
 	if err != nil {
 		return nil, err

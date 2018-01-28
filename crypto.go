@@ -1,0 +1,126 @@
+package libp2pquic
+
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	"math/big"
+	"time"
+
+	"github.com/lucas-clemente/quic-go"
+
+	"github.com/gogo/protobuf/proto"
+	ic "github.com/libp2p/go-libp2p-crypto"
+	pb "github.com/libp2p/go-libp2p-crypto/pb"
+)
+
+// mint certificate selection is broken.
+const hostname = "quic.ipfs"
+
+type connectionStater interface {
+	ConnectionState() quic.ConnectionState
+}
+
+// TODO: make this private
+func GenerateConfig(privKey ic.PrivKey) (*tls.Config, error) {
+	key, hostCert, err := keyToCertificate(privKey)
+	if err != nil {
+		return nil, err
+	}
+	// The ephemeral key used just for a couple of connections (or a limited time).
+	ephemeralKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	// Sign the ephemeral key using the host key.
+	// This is the only time that the host's private key of the peer is needed.
+	// Note that this step could be done asynchronously, such that a running node doesn't need access its private key at all.
+	certTemplate := &x509.Certificate{
+		DNSNames:     []string{hostname},
+		SerialNumber: big.NewInt(1),
+		NotBefore:    time.Now().Add(-24 * time.Hour),
+		NotAfter:     time.Now().Add(30 * 24 * time.Hour),
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, certTemplate, hostCert, ephemeralKey.Public(), key)
+	if err != nil {
+		return nil, err
+	}
+	cert, err := x509.ParseCertificate(certDER)
+	if err != nil {
+		return nil, err
+	}
+	return &tls.Config{
+		ServerName:         hostname,
+		InsecureSkipVerify: true, // This is not insecure here. We will verify the cert chain ourselves.
+		ClientAuth:         tls.RequireAnyClientCert,
+		Certificates: []tls.Certificate{{
+			Certificate: [][]byte{cert.Raw, hostCert.Raw},
+			PrivateKey:  ephemeralKey,
+		}},
+	}, nil
+}
+
+func getRemotePubKey(conn connectionStater) (ic.PubKey, error) {
+	certChain := conn.ConnectionState().PeerCertificates
+	if len(certChain) != 2 {
+		return nil, errors.New("expected 2 certificates in the chain")
+	}
+	pool := x509.NewCertPool()
+	pool.AddCert(certChain[1])
+	if _, err := certChain[0].Verify(x509.VerifyOptions{Roots: pool}); err != nil {
+		return nil, err
+	}
+	remotePubKey, err := x509.MarshalPKIXPublicKey(certChain[1].PublicKey)
+	if err != nil {
+		return nil, err
+	}
+	return ic.UnmarshalRsaPublicKey(remotePubKey)
+}
+
+func keyToCertificate(sk ic.PrivKey) (interface{}, *x509.Certificate, error) {
+	sn, err := rand.Int(rand.Reader, big.NewInt(1<<62))
+	if err != nil {
+		return nil, nil, err
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: sn,
+		NotBefore:    time.Now().Add(-24 * time.Hour),
+		NotAfter:     time.Now().Add(30 * 24 * time.Hour),
+		IsCA:         true,
+		BasicConstraintsValid: true,
+	}
+
+	var publicKey, privateKey interface{}
+	keyBytes, err := sk.Bytes()
+	if err != nil {
+		return nil, nil, err
+	}
+	pbmes := new(pb.PrivateKey)
+	if err := proto.Unmarshal(keyBytes, pbmes); err != nil {
+		return nil, nil, err
+	}
+	switch pbmes.GetType() {
+	case pb.KeyType_RSA:
+		k, err := x509.ParsePKCS1PrivateKey(pbmes.GetData())
+		if err != nil {
+			return nil, nil, err
+		}
+		publicKey = &k.PublicKey
+		privateKey = k
+	// TODO: add support for ECDSA
+	default:
+		return nil, nil, errors.New("unsupported key type for TLS")
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, publicKey, privateKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	cert, err := x509.ParseCertificate(certDER)
+	if err != nil {
+		return nil, nil, err
+	}
+	return privateKey, cert, nil
+}
