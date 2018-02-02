@@ -10,8 +10,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
-
 	"github.com/gogo/protobuf/proto"
 	ic "github.com/libp2p/go-libp2p-crypto"
 	pb "github.com/libp2p/go-libp2p-crypto/pb"
@@ -19,10 +17,6 @@ import (
 
 // mint certificate selection is broken.
 const hostname = "quic.ipfs"
-
-type connectionStater interface {
-	ConnectionState() quic.ConnectionState
-}
 
 // TODO: make this private
 func GenerateConfig(privKey ic.PrivKey) (*tls.Config, error) {
@@ -63,17 +57,16 @@ func GenerateConfig(privKey ic.PrivKey) (*tls.Config, error) {
 	}, nil
 }
 
-func getRemotePubKey(conn connectionStater) (ic.PubKey, error) {
-	certChain := conn.ConnectionState().PeerCertificates
-	if len(certChain) != 2 {
+func getRemotePubKey(chain []*x509.Certificate) (ic.PubKey, error) {
+	if len(chain) != 2 {
 		return nil, errors.New("expected 2 certificates in the chain")
 	}
 	pool := x509.NewCertPool()
-	pool.AddCert(certChain[1])
-	if _, err := certChain[0].Verify(x509.VerifyOptions{Roots: pool}); err != nil {
+	pool.AddCert(chain[1])
+	if _, err := chain[0].Verify(x509.VerifyOptions{Roots: pool}); err != nil {
 		return nil, err
 	}
-	remotePubKey, err := x509.MarshalPKIXPublicKey(certChain[1].PublicKey)
+	remotePubKey, err := x509.MarshalPKIXPublicKey(chain[1].PublicKey)
 	if err != nil {
 		return nil, err
 	}

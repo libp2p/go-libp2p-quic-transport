@@ -80,14 +80,14 @@ var _ = Describe("Connection", func() {
 		thirdPartyID, err := peer.IDFromPrivateKey(createPeer())
 		Expect(err).ToNot(HaveOccurred())
 
-		serverAddrChan, _ := runServer()
+		serverAddrChan, serverConnChan := runServer()
 		clientTransport, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
 		serverAddr := <-serverAddrChan
 		// dial, but expect the wrong peer ID
 		_, err = clientTransport.Dial(context.Background(), serverAddr, thirdPartyID)
-		Expect(err).To(MatchError("peer IDs don't match"))
-		// TODO(#2): don't accept a connection if the client's peer verification fails
-		// Consistently(serverConnChan).ShouldNot(Receive())
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("TLS handshake error: bad certificate"))
+		Consistently(serverConnChan).ShouldNot(Receive())
 	})
 })

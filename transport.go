@@ -2,6 +2,7 @@ package libp2pquic
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 
 	ic "github.com/libp2p/go-libp2p-crypto"
@@ -45,21 +46,32 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	sess, err := quicDialAddr(host, tlsConf, &quic.Config{Versions: []quic.VersionNumber{101}})
-	if err != nil {
-		return nil, err
+	var remotePubKey ic.PubKey
+	tlsConf.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+		chain := make([]*x509.Certificate, len(rawCerts))
+		for i := 0; i < len(rawCerts); i++ {
+			cert, err := x509.ParseCertificate(rawCerts[i])
+			if err != nil {
+				return err
+			}
+			chain[i] = cert
+		}
+		var err error
+		remotePubKey, err = getRemotePubKey(chain)
+		if err != nil {
+			return err
+		}
+		if !p.MatchesPublicKey(remotePubKey) {
+			return errors.New("peer IDs don't match")
+		}
+		return nil
 	}
-	remotePubKey, err := getRemotePubKey(sess)
+	sess, err := quicDialAddr(host, tlsConf, &quic.Config{Versions: []quic.VersionNumber{101}})
 	if err != nil {
 		return nil, err
 	}
 	localMultiaddr, err := quicMultiaddr(sess.LocalAddr())
 	if err != nil {
-		return nil, err
-	}
-	if !p.MatchesPublicKey(remotePubKey) {
-		err := errors.New("peer IDs don't match")
-		sess.Close(err)
 		return nil, err
 	}
 	return &conn{

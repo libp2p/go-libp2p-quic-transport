@@ -60,7 +60,7 @@ func (l *listener) Accept() (tpt.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	remotePubKey, err := getRemotePubKey(sess)
+	remotePubKey, err := getRemotePubKey(sess.ConnectionState().PeerCertificates)
 	if err != nil {
 		return nil, err
 	}

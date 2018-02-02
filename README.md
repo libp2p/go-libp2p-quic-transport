@@ -9,4 +9,3 @@ This is an implementation of the [libp2p transport](https://github.com/libp2p/go
 ## Known limitations
 
 * currently only works with RSA host keys
-* [#2](https://github.com/marten-seemann/libp2p-quic-transport/issues/2)
