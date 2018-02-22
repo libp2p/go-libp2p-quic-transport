@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"io/ioutil"
 
 	ic "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"
@@ -74,6 +75,26 @@ var _ = Describe("Connection", func() {
 		Expect(serverConn.LocalPrivateKey()).To(Equal(serverKey))
 		Expect(serverConn.RemotePeer()).To(Equal(clientID))
 		Expect(serverConn.RemotePublicKey()).To(Equal(clientKey.GetPublic()))
+	})
+
+	It("opens and accepts streams", func() {
+		serverAddrChan, serverConnChan := runServer()
+		clientTransport, err := NewTransport(clientKey)
+		Expect(err).ToNot(HaveOccurred())
+		conn, err := clientTransport.Dial(context.Background(), <-serverAddrChan, serverID)
+		Expect(err).ToNot(HaveOccurred())
+		serverConn := <-serverConnChan
+
+		str, err := conn.OpenStream()
+		Expect(err).ToNot(HaveOccurred())
+		_, err = str.Write([]byte("foobar"))
+		Expect(err).ToNot(HaveOccurred())
+		str.Close()
+		sstr, err := serverConn.AcceptStream()
+		Expect(err).ToNot(HaveOccurred())
+		data, err := ioutil.ReadAll(sstr)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(data).To(Equal([]byte("foobar")))
 	})
 
 	It("fails if the peer ID doesn't match", func() {
