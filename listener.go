@@ -32,7 +32,7 @@ func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, 
 	if err != nil {
 		return nil, err
 	}
-	tlsConf, err := GenerateConfig(key)
+	tlsConf, err := generateConfig(key)
 	if err != nil {
 		return nil, err
 	}

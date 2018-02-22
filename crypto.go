@@ -18,8 +18,7 @@ import (
 // mint certificate selection is broken.
 const hostname = "quic.ipfs"
 
-// TODO: make this private
-func GenerateConfig(privKey ic.PrivKey) (*tls.Config, error) {
+func generateConfig(privKey ic.PrivKey) (*tls.Config, error) {
 	key, hostCert, err := keyToCertificate(privKey)
 	if err != nil {
 		return nil, err

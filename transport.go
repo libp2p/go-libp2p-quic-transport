@@ -42,7 +42,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	tlsConf, err := GenerateConfig(t.privKey)
+	tlsConf, err := generateConfig(t.privKey)
 	if err != nil {
 		return nil, err
 	}
