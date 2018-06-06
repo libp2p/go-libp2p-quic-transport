@@ -1,6 +1,7 @@
 package libp2pquic
 
 import (
+	"crypto/tls"
 	"net"
 
 	ic "github.com/libp2p/go-libp2p-crypto"
@@ -27,12 +28,8 @@ type listener struct {
 
 var _ tpt.Listener = &listener{}
 
-func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, key ic.PrivKey) (tpt.Listener, error) {
+func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, key ic.PrivKey, tlsConf *tls.Config) (tpt.Listener, error) {
 	_, host, err := manet.DialArgs(addr)
-	if err != nil {
-		return nil, err
-	}
-	tlsConf, err := generateConfig(key)
 	if err != nil {
 		return nil, err
 	}
