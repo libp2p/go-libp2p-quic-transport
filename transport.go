@@ -15,6 +15,12 @@ import (
 	"github.com/whyrusleeping/mafmt"
 )
 
+var quicConfig = &quic.Config{
+	MaxReceiveStreamFlowControlWindow:     3 * (1 << 20),   // 3 MB
+	MaxReceiveConnectionFlowControlWindow: 4.5 * (1 << 20), // 4.5 MB
+	Versions: []quic.VersionNumber{101},
+}
+
 var quicDialAddr = quic.DialAddr
 
 // The Transport implements the tpt.Transport interface for QUIC connections.
@@ -70,7 +76,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		}
 		return nil
 	}
-	sess, err := quicDialAddr(host, tlsConf, &quic.Config{Versions: []quic.VersionNumber{101}})
+	sess, err := quicDialAddr(host, tlsConf, quicConfig)
 	if err != nil {
 		return nil, err
 	}

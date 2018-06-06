@@ -33,7 +33,7 @@ func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, 
 	if err != nil {
 		return nil, err
 	}
-	ln, err := quicListenAddr(host, tlsConf, &quic.Config{Versions: []quic.VersionNumber{101}})
+	ln, err := quicListenAddr(host, tlsConf, quicConfig)
 	if err != nil {
 		return nil, err
 	}
