@@ -1,91 +1,97 @@
 package libp2pquic
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/pem"
-	"math/big"
 	"net"
 
+	ic "github.com/libp2p/go-libp2p-crypto"
+	peer "github.com/libp2p/go-libp2p-peer"
 	tpt "github.com/libp2p/go-libp2p-transport"
 	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
 )
 
-type listener struct {
-	laddr        ma.Multiaddr
-	quicListener quic.Listener
+var quicListenAddr = quic.ListenAddr
 
-	transport tpt.Transport
+// A listener listens for QUIC connections.
+type listener struct {
+	quicListener quic.Listener
+	transport    tpt.Transport
+
+	acceptQueue chan tpt.Conn
+
+	privKey        ic.PrivKey
+	localPeer      peer.ID
+	localMultiaddr ma.Multiaddr
 }
 
 var _ tpt.Listener = &listener{}
 
-func newListener(laddr ma.Multiaddr, t tpt.Transport) (*listener, error) {
-	_, host, err := manet.DialArgs(laddr)
+func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, key ic.PrivKey, tlsConf *tls.Config) (tpt.Listener, error) {
+	_, host, err := manet.DialArgs(addr)
 	if err != nil {
 		return nil, err
 	}
-	tlsConf, err := generateTLSConfig()
+	ln, err := quicListenAddr(host, tlsConf, quicConfig)
 	if err != nil {
 		return nil, err
 	}
-	qln, err := quic.ListenAddr(host, tlsConf, nil)
+	localMultiaddr, err := quicMultiaddr(ln.Addr())
 	if err != nil {
 		return nil, err
 	}
-	addr, err := quicMultiAddress(qln.Addr())
-	if err != nil {
-		return nil, err
-	}
-
 	return &listener{
-		laddr:        addr,
-		quicListener: qln,
-		transport:    t,
+		quicListener:   ln,
+		transport:      transport,
+		privKey:        key,
+		localPeer:      localPeer,
+		localMultiaddr: localMultiaddr,
 	}, nil
 }
 
+// Accept accepts new connections.
+// TODO(#2): don't accept a connection if the client's peer verification fails
 func (l *listener) Accept() (tpt.Conn, error) {
 	sess, err := l.quicListener.Accept()
 	if err != nil {
 		return nil, err
 	}
-	return newQuicConn(sess, l.transport)
+	remotePubKey, err := getRemotePubKey(sess.ConnectionState().PeerCertificates)
+	if err != nil {
+		return nil, err
+	}
+	remotePeerID, err := peer.IDFromPublicKey(remotePubKey)
+	if err != nil {
+		return nil, err
+	}
+	remoteMultiaddr, err := quicMultiaddr(sess.RemoteAddr())
+	if err != nil {
+		return nil, err
+	}
+	return &conn{
+		sess:            sess,
+		transport:       l.transport,
+		localPeer:       l.localPeer,
+		localMultiaddr:  l.localMultiaddr,
+		privKey:         l.privKey,
+		remoteMultiaddr: remoteMultiaddr,
+		remotePeerID:    remotePeerID,
+		remotePubKey:    remotePubKey,
+	}, nil
 }
 
+// Close closes the listener.
 func (l *listener) Close() error {
 	return l.quicListener.Close()
 }
 
+// Addr returns the address of this listener.
 func (l *listener) Addr() net.Addr {
 	return l.quicListener.Addr()
 }
 
+// Multiaddr returns the multiaddress of this listener.
 func (l *listener) Multiaddr() ma.Multiaddr {
-	return l.laddr
-}
-
-// Generate a bare-bones TLS config for the server.
-// The client doesn't verify the certificate yet.
-func generateTLSConfig() (*tls.Config, error) {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, err
-	}
-	template := x509.Certificate{SerialNumber: big.NewInt(1)}
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
-	if err != nil {
-		return nil, err
-	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		return nil, err
-	}
-	return &tls.Config{Certificates: []tls.Certificate{tlsCert}}, nil
+	return l.localMultiaddr
 }

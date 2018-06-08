@@ -5,3 +5,7 @@
 [![Code Coverage](https://img.shields.io/codecov/c/github/marten-seemann/libp2p-quic-transport/master.svg?style=flat-square)](https://codecov.io/gh/marten-seemann/libp2p-quic-transport/)
 
 This is an implementation of the [libp2p transport](https://github.com/libp2p/go-libp2p-transport/blob/master/transport.go) and the [libp2p stream muxer](https://github.com/libp2p/go-stream-muxer) using QUIC.
+
+## Known limitations
+
+* currently only works with RSA host keys

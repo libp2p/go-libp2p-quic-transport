@@ -1,83 +1,120 @@
 package libp2pquic
 
 import (
-	"fmt"
-	"sync"
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 
+	ic "github.com/libp2p/go-libp2p-crypto"
+	peer "github.com/libp2p/go-libp2p-peer"
 	tpt "github.com/libp2p/go-libp2p-transport"
+	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr-net"
 	"github.com/whyrusleeping/mafmt"
 )
 
-// QuicTransport implements a QUIC Transport
-type QuicTransport struct {
-	lmutex    sync.Mutex
-	listeners map[string]tpt.Listener
-
-	dmutex  sync.Mutex
-	dialers map[string]tpt.Dialer
+var quicConfig = &quic.Config{
+	MaxReceiveStreamFlowControlWindow:     3 * (1 << 20),   // 3 MB
+	MaxReceiveConnectionFlowControlWindow: 4.5 * (1 << 20), // 4.5 MB
+	Versions: []quic.VersionNumber{101},
 }
 
-var _ tpt.Transport = &QuicTransport{}
+var quicDialAddr = quic.DialAddr
 
-// NewQuicTransport creates a new QUIC Transport
-// it tracks dialers and listeners created
-func NewQuicTransport() *QuicTransport {
-	// utils.SetLogLevel(utils.LogLevelDebug)
-	return &QuicTransport{
-		listeners: make(map[string]tpt.Listener),
-		dialers:   make(map[string]tpt.Dialer),
-	}
+// The Transport implements the tpt.Transport interface for QUIC connections.
+type transport struct {
+	privKey   ic.PrivKey
+	localPeer peer.ID
+	tlsConf   *tls.Config
 }
 
-func (t *QuicTransport) Dialer(laddr ma.Multiaddr, opts ...tpt.DialOpt) (tpt.Dialer, error) {
-	if !t.Matches(laddr) {
-		return nil, fmt.Errorf("quic transport cannot dial %q", laddr)
-	}
+var _ tpt.Transport = &transport{}
 
-	t.dmutex.Lock()
-	defer t.dmutex.Unlock()
-
-	s := laddr.String()
-	d, ok := t.dialers[s]
-	if ok {
-		return d, nil
-	}
-
-	// TODO: read opts
-	quicd, err := newDialer(t)
+// NewTransport creates a new QUIC transport
+func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
+	localPeer, err := peer.IDFromPrivateKey(key)
 	if err != nil {
 		return nil, err
 	}
-	t.dialers[s] = quicd
-	return quicd, nil
-}
-
-// Listen starts listening on laddr
-func (t *QuicTransport) Listen(laddr ma.Multiaddr) (tpt.Listener, error) {
-	if !t.Matches(laddr) {
-		return nil, fmt.Errorf("quic transport cannot listen on %q", laddr)
-	}
-
-	t.lmutex.Lock()
-	defer t.lmutex.Unlock()
-
-	l, ok := t.listeners[laddr.String()]
-	if ok {
-		return l, nil
-	}
-
-	ln, err := newListener(laddr, t)
+	tlsConf, err := generateConfig(key)
 	if err != nil {
 		return nil, err
 	}
-
-	t.listeners[laddr.String()] = ln
-	return ln, nil
+	return &transport{
+		privKey:   key,
+		localPeer: localPeer,
+		tlsConf:   tlsConf,
+	}, nil
 }
 
-func (t *QuicTransport) Matches(a ma.Multiaddr) bool {
-	return mafmt.QUIC.Matches(a)
+// Dial dials a new QUIC connection
+func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tpt.Conn, error) {
+	_, host, err := manet.DialArgs(raddr)
+	if err != nil {
+		return nil, err
+	}
+	var remotePubKey ic.PubKey
+	tlsConf := t.tlsConf.Clone()
+	tlsConf.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+		chain := make([]*x509.Certificate, len(rawCerts))
+		for i := 0; i < len(rawCerts); i++ {
+			cert, err := x509.ParseCertificate(rawCerts[i])
+			if err != nil {
+				return err
+			}
+			chain[i] = cert
+		}
+		var err error
+		remotePubKey, err = getRemotePubKey(chain)
+		if err != nil {
+			return err
+		}
+		if !p.MatchesPublicKey(remotePubKey) {
+			return errors.New("peer IDs don't match")
+		}
+		return nil
+	}
+	sess, err := quicDialAddr(host, tlsConf, quicConfig)
+	if err != nil {
+		return nil, err
+	}
+	localMultiaddr, err := quicMultiaddr(sess.LocalAddr())
+	if err != nil {
+		return nil, err
+	}
+	return &conn{
+		sess:            sess,
+		privKey:         t.privKey,
+		localPeer:       t.localPeer,
+		localMultiaddr:  localMultiaddr,
+		remotePubKey:    remotePubKey,
+		remotePeerID:    p,
+		remoteMultiaddr: raddr,
+	}, nil
 }
 
-var _ tpt.Transport = &QuicTransport{}
+// CanDial determines if we can dial to an address
+func (t *transport) CanDial(addr ma.Multiaddr) bool {
+	return mafmt.QUIC.Matches(addr)
+}
+
+// Listen listens for new QUIC connections on the passed multiaddr.
+func (t *transport) Listen(addr ma.Multiaddr) (tpt.Listener, error) {
+	return newListener(addr, t, t.localPeer, t.privKey, t.tlsConf)
+}
+
+// Proxy returns true if this transport proxies.
+func (t *transport) Proxy() bool {
+	return false
+}
+
+// Protocols returns the set of protocols handled by this transport.
+func (t *transport) Protocols() []int {
+	return []int{ma.P_QUIC}
+}
+
+func (t *transport) String() string {
+	return "QUIC"
+}

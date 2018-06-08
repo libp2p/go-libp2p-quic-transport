@@ -1,81 +1,67 @@
 package libp2pquic
 
 import (
-	"errors"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"fmt"
 	"net"
 
+	ic "github.com/libp2p/go-libp2p-crypto"
 	tpt "github.com/libp2p/go-libp2p-transport"
-	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-type mockQuicListener struct {
-	connToAccept net.Conn
-	serveErr     error
-	closed       bool
-
-	sessionToAccept quic.Session
-	acceptErr       error
-}
-
-var _ quic.Listener = &mockQuicListener{}
-
-func (m *mockQuicListener) Close() error                  { m.closed = true; return nil }
-func (m *mockQuicListener) Accept() (quic.Session, error) { return m.sessionToAccept, m.acceptErr }
-func (m *mockQuicListener) Addr() net.Addr                { panic("not implemented") }
-
 var _ = Describe("Listener", func() {
 	var (
-		l            *listener
-		quicListener *mockQuicListener
-		transport    tpt.Transport
+		t         tpt.Transport
+		localAddr ma.Multiaddr
 	)
 
 	BeforeEach(func() {
-		quicListener = &mockQuicListener{}
-		transport = &QuicTransport{}
-		l = &listener{
-			quicListener: quicListener,
-			transport:    transport,
-		}
+		rsaKey, err := rsa.GenerateKey(rand.Reader, 1024)
+		Expect(err).ToNot(HaveOccurred())
+		key, err := ic.UnmarshalRsaPrivateKey(x509.MarshalPKCS1PrivateKey(rsaKey))
+		Expect(err).ToNot(HaveOccurred())
+		t, err = NewTransport(key)
+		Expect(err).ToNot(HaveOccurred())
+		localAddr, err = ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
+		Expect(err).ToNot(HaveOccurred())
 	})
 
-	It("returns its addr", func() {
-		laddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
+	It("returns the address it is listening on", func() {
+		ln, err := t.Listen(localAddr)
 		Expect(err).ToNot(HaveOccurred())
-		l, err = newListener(laddr, nil)
-		Expect(err).ToNot(HaveOccurred())
-		as := l.Addr().String()
-		Expect(as).ToNot(Equal("127.0.0.1:0)"))
-		Expect(as).To(ContainSubstring("127.0.0.1:"))
+		netAddr := ln.Addr()
+		Expect(netAddr).To(BeAssignableToTypeOf(&net.UDPAddr{}))
+		port := netAddr.(*net.UDPAddr).Port
+		Expect(port).ToNot(BeZero())
+		Expect(ln.Multiaddr().String()).To(Equal(fmt.Sprintf("/ip4/127.0.0.1/udp/%d/quic", port)))
 	})
 
-	It("returns its multiaddr", func() {
-		laddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
+	It("returns Accept when it is closed", func() {
+		addr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
 		Expect(err).ToNot(HaveOccurred())
-		l, err = newListener(laddr, nil)
+		ln, err := t.Listen(addr)
 		Expect(err).ToNot(HaveOccurred())
-		mas := l.Multiaddr().String()
-		Expect(mas).ToNot(Equal("/ip4/127.0.0.1/udp/0/quic"))
-		Expect(mas).To(ContainSubstring("/ip4/127.0.0.1/udp/"))
-		Expect(mas).To(ContainSubstring("/quic"))
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			ln.Accept()
+			close(done)
+		}()
+		Consistently(done).ShouldNot(BeClosed())
+		Expect(ln.Close()).To(Succeed())
+		Eventually(done).Should(BeClosed())
 	})
 
-	It("closes", func() {
-		err := l.Close()
+	It("doesn't accept Accept calls after it is closed", func() {
+		ln, err := t.Listen(localAddr)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(quicListener.closed).To(BeTrue())
-	})
-
-	Context("accepting", func() {
-		It("errors if no connection can be accepted", func() {
-			testErr := errors.New("test error")
-			quicListener.acceptErr = testErr
-			_, err := l.Accept()
-			Expect(err).To(MatchError(testErr))
-		})
+		Expect(ln.Close()).To(Succeed())
+		_, err = ln.Accept()
+		Expect(err).To(HaveOccurred())
 	})
 })
