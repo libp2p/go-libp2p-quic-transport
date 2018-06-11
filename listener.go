@@ -19,8 +19,6 @@ type listener struct {
 	quicListener quic.Listener
 	transport    tpt.Transport
 
-	acceptQueue chan tpt.Conn
-
 	privKey        ic.PrivKey
 	localPeer      peer.ID
 	localMultiaddr ma.Multiaddr
