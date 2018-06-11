@@ -57,6 +57,9 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	}
 	var remotePubKey ic.PubKey
 	tlsConf := t.tlsConf.Clone()
+	// We need to check the peer ID in the VerifyPeerCertificate callback.
+	// The tls.Config it is also used for listening, and we might also have concurrent dials.
+	// Clone it so we can check for the specific peer ID we're dialing here.
 	tlsConf.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 		chain := make([]*x509.Certificate, len(rawCerts))
 		for i := 0; i < len(rawCerts); i++ {

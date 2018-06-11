@@ -49,12 +49,22 @@ func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, 
 }
 
 // Accept accepts new connections.
-// TODO(#2): don't accept a connection if the client's peer verification fails
 func (l *listener) Accept() (tpt.Conn, error) {
-	sess, err := l.quicListener.Accept()
-	if err != nil {
-		return nil, err
+	for {
+		sess, err := l.quicListener.Accept()
+		if err != nil {
+			return nil, err
+		}
+		conn, err := l.setupConn(sess)
+		if err != nil {
+			sess.Close(err)
+			continue
+		}
+		return conn, nil
 	}
+}
+
+func (l *listener) setupConn(sess quic.Session) (tpt.Conn, error) {
 	remotePubKey, err := getRemotePubKey(sess.ConnectionState().PeerCertificates)
 	if err != nil {
 		return nil, err
