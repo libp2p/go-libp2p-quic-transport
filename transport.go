@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"net"
 
 	ic "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"
@@ -19,6 +20,10 @@ var quicConfig = &quic.Config{
 	MaxReceiveStreamFlowControlWindow:     3 * (1 << 20),   // 3 MB
 	MaxReceiveConnectionFlowControlWindow: 4.5 * (1 << 20), // 4.5 MB
 	Versions: []quic.VersionNumber{101},
+	AcceptCookie: func(clientAddr net.Addr, cookie *quic.Cookie) bool {
+		// TODO(#6): require source address validation when under load
+		return true
+	},
 }
 
 var quicDialAddr = quic.DialAddr
