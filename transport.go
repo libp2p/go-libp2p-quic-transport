@@ -26,8 +26,6 @@ var quicConfig = &quic.Config{
 	},
 }
 
-var quicDialAddr = quic.DialAddr
-
 // The Transport implements the tpt.Transport interface for QUIC connections.
 type transport struct {
 	privKey   ic.PrivKey
@@ -84,7 +82,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		}
 		return nil
 	}
-	sess, err := quicDialAddr(host, tlsConf, quicConfig)
+	sess, err := quic.DialAddrContext(ctx, host, tlsConf, quicConfig)
 	if err != nil {
 		return nil, err
 	}
