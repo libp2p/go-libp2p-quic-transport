@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestQuicGo(t *testing.T) {
+func TestLibp2pQuicTransport(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "libp2p QUIC Transport Suite")
 }
