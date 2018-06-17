@@ -1,15 +1,12 @@
 package libp2pquic
 
 import (
-	"net"
-
 	ic "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"
 	tpt "github.com/libp2p/go-libp2p-transport"
 	smux "github.com/libp2p/go-stream-muxer"
 	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr-net"
 )
 
 type conn struct {
@@ -80,16 +77,4 @@ func (c *conn) RemoteMultiaddr() ma.Multiaddr {
 
 func (c *conn) Transport() tpt.Transport {
 	return c.transport
-}
-
-func quicMultiaddr(na net.Addr) (ma.Multiaddr, error) {
-	udpMA, err := manet.FromNetAddr(na)
-	if err != nil {
-		return nil, err
-	}
-	quicMA, err := ma.NewMultiaddr("/quic")
-	if err != nil {
-		return nil, err
-	}
-	return udpMA.Encapsulate(quicMA), nil
 }

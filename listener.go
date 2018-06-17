@@ -35,7 +35,7 @@ func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, 
 	if err != nil {
 		return nil, err
 	}
-	localMultiaddr, err := quicMultiaddr(ln.Addr())
+	localMultiaddr, err := toQuicMultiaddr(ln.Addr())
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (l *listener) setupConn(sess quic.Session) (tpt.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	remoteMultiaddr, err := quicMultiaddr(sess.RemoteAddr())
+	remoteMultiaddr, err := toQuicMultiaddr(sess.RemoteAddr())
 	if err != nil {
 		return nil, err
 	}

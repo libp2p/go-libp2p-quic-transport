@@ -86,7 +86,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	localMultiaddr, err := quicMultiaddr(sess.LocalAddr())
+	localMultiaddr, err := toQuicMultiaddr(sess.LocalAddr())
 	if err != nil {
 		return nil, err
 	}
