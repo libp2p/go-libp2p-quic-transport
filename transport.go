@@ -31,6 +31,7 @@ type transport struct {
 	privKey   ic.PrivKey
 	localPeer peer.ID
 	tlsConf   *tls.Config
+	pconn     net.PacketConn
 }
 
 var _ tpt.Transport = &transport{}
@@ -45,16 +46,32 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// create a packet conn for outgoing connections
+	addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+	if err != nil {
+		return nil, err
+	}
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		return nil, err
+	}
+
 	return &transport{
 		privKey:   key,
 		localPeer: localPeer,
 		tlsConf:   tlsConf,
+		pconn:     conn,
 	}, nil
 }
 
 // Dial dials a new QUIC connection
 func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tpt.Conn, error) {
 	_, host, err := manet.DialArgs(raddr)
+	if err != nil {
+		return nil, err
+	}
+	addr, err := fromQuicMultiaddr(raddr)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +99,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		}
 		return nil
 	}
-	sess, err := quic.DialAddrContext(ctx, host, tlsConf, quicConfig)
+	sess, err := quic.DialContext(ctx, t.pconn, addr, host, tlsConf, quicConfig)
 	if err != nil {
 		return nil, err
 	}
