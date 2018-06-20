@@ -82,15 +82,14 @@ func (c *conn) Transport() tpt.Transport {
 	return c.transport
 }
 
-// TODO: there must be a better way to do this
 func quicMultiaddr(na net.Addr) (ma.Multiaddr, error) {
 	udpMA, err := manet.FromNetAddr(na)
 	if err != nil {
 		return nil, err
 	}
-	quicMA, err := ma.NewMultiaddr(udpMA.String() + "/quic")
+	quicMA, err := ma.NewMultiaddr("/quic")
 	if err != nil {
 		return nil, err
 	}
-	return quicMA, nil
+	return udpMA.Encapsulate(quicMA), nil
 }
