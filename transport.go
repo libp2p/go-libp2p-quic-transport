@@ -24,6 +24,7 @@ var quicConfig = &quic.Config{
 		// TODO(#6): require source address validation when under load
 		return true
 	},
+	KeepAlive: true,
 }
 
 // The Transport implements the tpt.Transport interface for QUIC connections.
