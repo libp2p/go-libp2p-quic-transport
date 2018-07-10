@@ -57,7 +57,7 @@ func (l *listener) Accept() (tpt.Conn, error) {
 		}
 		conn, err := l.setupConn(sess)
 		if err != nil {
-			sess.Close(err)
+			sess.CloseWithError(0, err)
 			continue
 		}
 		return conn, nil
