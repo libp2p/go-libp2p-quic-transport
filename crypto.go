@@ -102,7 +102,13 @@ func keyToCertificate(sk ic.PrivKey) (interface{}, *x509.Certificate, error) {
 		}
 		publicKey = &k.PublicKey
 		privateKey = k
-	// TODO: add support for ECDSA
+	case pb.KeyType_Ed25519:
+		k, err := x509.ParsePKCS1PrivateKey(pbmes.GetData())
+		if err != nil {
+			return nil, nil, err
+		}
+		publicKey = &k.PublicKey
+		privateKey = k
 	default:
 		return nil, nil, errors.New("unsupported key type for TLS")
 	}
