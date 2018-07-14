@@ -27,11 +27,19 @@ type listener struct {
 var _ tpt.Listener = &listener{}
 
 func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, key ic.PrivKey, tlsConf *tls.Config) (tpt.Listener, error) {
-	_, host, err := manet.DialArgs(addr)
+	lnet, host, err := manet.DialArgs(addr)
 	if err != nil {
 		return nil, err
 	}
-	ln, err := quicListenAddr(host, tlsConf, quicConfig)
+	laddr, err := net.ResolveUDPAddr(lnet, host)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := net.ListenUDP(lnet, laddr)
+	if err != nil {
+		return nil, err
+	}
+	ln, err := quic.Listen(conn, tlsConf, quicConfig)
 	if err != nil {
 		return nil, err
 	}

@@ -15,10 +15,7 @@ import (
 )
 
 var _ = Describe("Listener", func() {
-	var (
-		t         tpt.Transport
-		localAddr ma.Multiaddr
-	)
+	var t tpt.Transport
 
 	BeforeEach(func() {
 		rsaKey, err := rsa.GenerateKey(rand.Reader, 1024)
@@ -27,41 +24,76 @@ var _ = Describe("Listener", func() {
 		Expect(err).ToNot(HaveOccurred())
 		t, err = NewTransport(key)
 		Expect(err).ToNot(HaveOccurred())
-		localAddr, err = ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
-		Expect(err).ToNot(HaveOccurred())
 	})
 
-	It("returns the address it is listening on", func() {
-		ln, err := t.Listen(localAddr)
-		Expect(err).ToNot(HaveOccurred())
-		netAddr := ln.Addr()
-		Expect(netAddr).To(BeAssignableToTypeOf(&net.UDPAddr{}))
-		port := netAddr.(*net.UDPAddr).Port
-		Expect(port).ToNot(BeZero())
-		Expect(ln.Multiaddr().String()).To(Equal(fmt.Sprintf("/ip4/127.0.0.1/udp/%d/quic", port)))
+	Context("listening on the right address", func() {
+		It("returns the address it is listening on", func() {
+			localAddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
+			ln, err := t.Listen(localAddr)
+			Expect(err).ToNot(HaveOccurred())
+			netAddr := ln.Addr()
+			Expect(netAddr).To(BeAssignableToTypeOf(&net.UDPAddr{}))
+			port := netAddr.(*net.UDPAddr).Port
+			Expect(port).ToNot(BeZero())
+			Expect(ln.Multiaddr().String()).To(Equal(fmt.Sprintf("/ip4/127.0.0.1/udp/%d/quic", port)))
+		})
+
+		It("returns the address it is listening on, for listening on IPv4", func() {
+			localAddr, err := ma.NewMultiaddr("/ip4/0.0.0.0/udp/0/quic")
+			Expect(err).ToNot(HaveOccurred())
+			ln, err := t.Listen(localAddr)
+			Expect(err).ToNot(HaveOccurred())
+			netAddr := ln.Addr()
+			Expect(netAddr).To(BeAssignableToTypeOf(&net.UDPAddr{}))
+			port := netAddr.(*net.UDPAddr).Port
+			Expect(port).ToNot(BeZero())
+			Expect(ln.Multiaddr().String()).To(Equal(fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic", port)))
+		})
+
+		It("returns the address it is listening on, for listening on IPv6", func() {
+			localAddr, err := ma.NewMultiaddr("/ip6/::/udp/0/quic")
+			Expect(err).ToNot(HaveOccurred())
+			ln, err := t.Listen(localAddr)
+			Expect(err).ToNot(HaveOccurred())
+			netAddr := ln.Addr()
+			Expect(netAddr).To(BeAssignableToTypeOf(&net.UDPAddr{}))
+			port := netAddr.(*net.UDPAddr).Port
+			Expect(port).ToNot(BeZero())
+			Expect(ln.Multiaddr().String()).To(Equal(fmt.Sprintf("/ip6/::/udp/%d/quic", port)))
+		})
 	})
 
-	It("returns Accept when it is closed", func() {
-		addr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
-		Expect(err).ToNot(HaveOccurred())
-		ln, err := t.Listen(addr)
-		Expect(err).ToNot(HaveOccurred())
-		done := make(chan struct{})
-		go func() {
-			defer GinkgoRecover()
-			ln.Accept()
-			close(done)
-		}()
-		Consistently(done).ShouldNot(BeClosed())
-		Expect(ln.Close()).To(Succeed())
-		Eventually(done).Should(BeClosed())
-	})
+	Context("accepting connections", func() {
+		var localAddr ma.Multiaddr
 
-	It("doesn't accept Accept calls after it is closed", func() {
-		ln, err := t.Listen(localAddr)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(ln.Close()).To(Succeed())
-		_, err = ln.Accept()
-		Expect(err).To(HaveOccurred())
+		BeforeEach(func() {
+			var err error
+			localAddr, err = ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("returns Accept when it is closed", func() {
+			addr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
+			Expect(err).ToNot(HaveOccurred())
+			ln, err := t.Listen(addr)
+			Expect(err).ToNot(HaveOccurred())
+			done := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				ln.Accept()
+				close(done)
+			}()
+			Consistently(done).ShouldNot(BeClosed())
+			Expect(ln.Close()).To(Succeed())
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("doesn't accept Accept calls after it is closed", func() {
+			ln, err := t.Listen(localAddr)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(ln.Close()).To(Succeed())
+			_, err = ln.Accept()
+			Expect(err).To(HaveOccurred())
+		})
 	})
 })
