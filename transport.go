@@ -5,7 +5,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"net"
+	"sync"
 
 	ic "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"
@@ -27,12 +29,47 @@ var quicConfig = &quic.Config{
 	KeepAlive: true,
 }
 
+type connManager struct {
+	connIPv4Once sync.Once
+	connIPv4     net.PacketConn
+
+	connIPv6Once sync.Once
+	connIPv6     net.PacketConn
+}
+
+func (c *connManager) GetConnForAddr(network string) (net.PacketConn, error) {
+	switch network {
+	case "udp4":
+		var err error
+		c.connIPv4Once.Do(func() {
+			c.connIPv4, err = c.createConn(network, "0.0.0.0:0")
+		})
+		return c.connIPv4, err
+	case "udp6":
+		var err error
+		c.connIPv6Once.Do(func() {
+			c.connIPv6, err = c.createConn(network, ":0")
+		})
+		return c.connIPv6, err
+	default:
+		return nil, fmt.Errorf("unsupported network: %s", network)
+	}
+}
+
+func (c *connManager) createConn(network, host string) (net.PacketConn, error) {
+	addr, err := net.ResolveUDPAddr(network, host)
+	if err != nil {
+		return nil, err
+	}
+	return net.ListenUDP(network, addr)
+}
+
 // The Transport implements the tpt.Transport interface for QUIC connections.
 type transport struct {
-	privKey   ic.PrivKey
-	localPeer peer.ID
-	tlsConf   *tls.Config
-	pconn     net.PacketConn
+	privKey     ic.PrivKey
+	localPeer   peer.ID
+	tlsConf     *tls.Config
+	connManager *connManager
 }
 
 var _ tpt.Transport = &transport{}
@@ -48,27 +85,21 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 		return nil, err
 	}
 
-	// create a packet conn for outgoing connections
-	addr, err := net.ResolveUDPAddr("udp", "localhost:0")
-	if err != nil {
-		return nil, err
-	}
-	conn, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		return nil, err
-	}
-
 	return &transport{
-		privKey:   key,
-		localPeer: localPeer,
-		tlsConf:   tlsConf,
-		pconn:     conn,
+		privKey:     key,
+		localPeer:   localPeer,
+		tlsConf:     tlsConf,
+		connManager: &connManager{},
 	}, nil
 }
 
 // Dial dials a new QUIC connection
 func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tpt.Conn, error) {
-	_, host, err := manet.DialArgs(raddr)
+	network, host, err := manet.DialArgs(raddr)
+	if err != nil {
+		return nil, err
+	}
+	pconn, err := t.connManager.GetConnForAddr(network)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +131,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		}
 		return nil
 	}
-	sess, err := quic.DialContext(ctx, t.pconn, addr, host, tlsConf, quicConfig)
+	sess, err := quic.DialContext(ctx, pconn, addr, host, tlsConf, quicConfig)
 	if err != nil {
 		return nil, err
 	}

@@ -35,12 +35,12 @@ var _ = Describe("Connection", func() {
 		return id, priv
 	}
 
-	runServer := func(tr tpt.Transport) (ma.Multiaddr, <-chan tpt.Conn) {
+	runServer := func(tr tpt.Transport, multiaddr string) (ma.Multiaddr, <-chan tpt.Conn) {
 		addrChan := make(chan ma.Multiaddr)
 		connChan := make(chan tpt.Conn)
 		go func() {
 			defer GinkgoRecover()
-			addr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
+			addr, err := ma.NewMultiaddr(multiaddr)
 			Expect(err).ToNot(HaveOccurred())
 			ln, err := tr.Listen(addr)
 			Expect(err).ToNot(HaveOccurred())
@@ -62,10 +62,30 @@ var _ = Describe("Connection", func() {
 		clientID, clientKey = createPeer()
 	})
 
-	It("handshakes", func() {
+	It("handshakes on IPv4", func() {
 		serverTransport, err := NewTransport(serverKey)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport)
+		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
+
+		clientTransport, err := NewTransport(clientKey)
+		Expect(err).ToNot(HaveOccurred())
+		conn, err := clientTransport.Dial(context.Background(), serverAddr, serverID)
+		Expect(err).ToNot(HaveOccurred())
+		serverConn := <-serverConnChan
+		Expect(conn.LocalPeer()).To(Equal(clientID))
+		Expect(conn.LocalPrivateKey()).To(Equal(clientKey))
+		Expect(conn.RemotePeer()).To(Equal(serverID))
+		Expect(conn.RemotePublicKey()).To(Equal(serverKey.GetPublic()))
+		Expect(serverConn.LocalPeer()).To(Equal(serverID))
+		Expect(serverConn.LocalPrivateKey()).To(Equal(serverKey))
+		Expect(serverConn.RemotePeer()).To(Equal(clientID))
+		Expect(serverConn.RemotePublicKey()).To(Equal(clientKey.GetPublic()))
+	})
+
+	It("handshakes on IPv6", func() {
+		serverTransport, err := NewTransport(serverKey)
+		Expect(err).ToNot(HaveOccurred())
+		serverAddr, serverConnChan := runServer(serverTransport, "/ip6/::1/udp/0/quic")
 
 		clientTransport, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
@@ -85,7 +105,7 @@ var _ = Describe("Connection", func() {
 	It("opens and accepts streams", func() {
 		serverTransport, err := NewTransport(serverKey)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport)
+		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
 		clientTransport, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
@@ -110,7 +130,7 @@ var _ = Describe("Connection", func() {
 
 		serverTransport, err := NewTransport(serverKey)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport)
+		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
 		clientTransport, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
@@ -124,7 +144,7 @@ var _ = Describe("Connection", func() {
 	It("fails if the client presents an invalid cert chain", func() {
 		serverTransport, err := NewTransport(serverKey)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport)
+		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
 		clientTransport, err := NewTransport(clientKey)
 		invalidateCertChain(clientTransport.(*transport).tlsConf)
@@ -139,7 +159,7 @@ var _ = Describe("Connection", func() {
 		serverTransport, err := NewTransport(serverKey)
 		invalidateCertChain(serverTransport.(*transport).tlsConf)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport)
+		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
 		clientTransport, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
@@ -152,7 +172,7 @@ var _ = Describe("Connection", func() {
 	It("keeps accepting connections after a failed connection attempt", func() {
 		serverTransport, err := NewTransport(serverKey)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport)
+		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
 		// first dial with an invalid cert chain
 		clientTransport1, err := NewTransport(clientKey)
@@ -175,10 +195,10 @@ var _ = Describe("Connection", func() {
 
 		serverTransport, err := NewTransport(serverKey)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport)
+		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		serverTransport2, err := NewTransport(serverKey2)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr2, serverConnChan2 := runServer(serverTransport2)
+		serverAddr2, serverConnChan2 := runServer(serverTransport2, "/ip4/127.0.0.1/udp/0/quic")
 
 		data := bytes.Repeat([]byte{'a'}, 5*1<<20) // 5 MB
 		// wait for both servers to accept a connection
