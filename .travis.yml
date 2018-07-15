@@ -14,17 +14,14 @@ env:
 # second part of the GOARCH workaround
 # now actually set the GOARCH env variable to the value of the temporary variable set earlier
 before_install:
-  - go get golang.org/x/tools/cmd/cover
-  - go get github.com/onsi/ginkgo/ginkgo
-  - go get github.com/onsi/gomega
+  - make deps
   - export GOARCH=$TRAVIS_GOARCH
   - go env # for debugging
 
 script:
-  - go get -t ./...
   - ginkgo -r --cover --randomizeAllSpecs --randomizeSuites --trace --progress
 
 after_success:
-  - cat libp2p-quic-transport.coverprofile > coverage.txt
+  - cat go-libp2p-quic-transport.coverprofile > coverage.txt
   - cat */*.coverprofile >> coverage.txt
   - bash <(curl -s https://codecov.io/bash) -f coverage.txt
