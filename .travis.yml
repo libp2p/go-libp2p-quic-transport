@@ -27,7 +27,7 @@ script:
 
 after_success:
   - cat go-libp2p-quic-transport.coverprofile > coverage.txt
-  - cat */*.coverprofile >> coverage.txt
+  - cat `find . -name "*.coverprofile"` > coverage.txt
   - bash <(curl -s https://codecov.io/bash) -f coverage.txt
 
 cache:
