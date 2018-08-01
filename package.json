@@ -1,47 +1,30 @@
 {
   "author": "marten-seemann",
   "bugs": {
-    "url": "github.com/marten-seemann/libp2p-quic-transport"
+    "url": "github.com/libp2p/go-libp2p-quic-transport"
   },
   "gx": {
-    "dvcsimport": "github.com/marten-seemann/libp2p-quic-transport"
+    "dvcsimport": "github.com/libp2p/go-libp2p-quic-transport"
   },
   "gxDependencies": [
     {
       "author": "marten-seemann",
-      "hash": "QmbapvVZg9QkfWBeDmLK314rXbHim6xdeGFBr4TfZJrbga",
-      "name": "quic-conn",
-      "version": "0.1.0"
-    },
-    {
-      "author": "multiformats",
-      "hash": "QmcyqRMCAXVtYPS4DiBrA7sezL9rRGfW8Ctx7cywL4TXJj",
-      "name": "go-multiaddr",
-      "version": "1.2.2"
+      "hash": "QmPL1Q7edxM6bHUy7rNjo6izmVte7fSbii64kr21wqmoZ2",
+      "name": "quic-go",
+      "version": "0.8.0"
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmSkUKdsSrEo1v28Y3NJ7vQT7jmbxg87g8ucbhctwHEqb4",
-      "name": "mafmt",
-      "version": "1.2.2"
-    },
-    {
-      "author": "whyrusleeping",
-      "hash": "QmSKoeo64CA54WNWqzVXHi5aT2LbgzP7B9VzQjW5yh7d4H",
+      "hash": "QmW5LxJm2Yo3S7uVsfLM7NsJn2QnKbvZD7uYsZVYR7YViE",
       "name": "go-libp2p-transport",
-      "version": "2.2.7"
-    },
-    {
-      "author": "whyrusleeping",
-      "hash": "QmcBtDaHnRxNpmJA6DwsWSUsUPVobRsoYFFkx1HnHMfY2v",
-      "name": "go-libp2p-peerstore",
-      "version": "1.4.7"
+      "version": "3.0.5"
     }
   ],
   "gxVersion": "0.11.0",
   "language": "go",
   "license": "",
-  "name": "libp2p-quic-transport",
+  "name": "go-libp2p-quic-transport",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
   "version": "0.1.0"
 }
+
