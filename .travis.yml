@@ -19,7 +19,7 @@ before_install:
   - go env # for debugging
 
 script:
-  - ginkgo -r --cover --randomizeAllSpecs --randomizeSuites --trace --progress
+  - ginkgo -r -v --cover --randomizeAllSpecs --randomizeSuites --trace --progress
 
 after_success:
   - cat go-libp2p-quic-transport.coverprofile > coverage.txt
