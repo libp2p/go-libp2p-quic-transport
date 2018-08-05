@@ -18,6 +18,8 @@ import (
 // mint certificate selection is broken.
 const hostname = "quic.ipfs"
 
+const certValidityPeriod = 180 * 24 * time.Hour
+
 func generateConfig(privKey ic.PrivKey) (*tls.Config, error) {
 	key, hostCert, err := keyToCertificate(privKey)
 	if err != nil {
@@ -35,7 +37,7 @@ func generateConfig(privKey ic.PrivKey) (*tls.Config, error) {
 		DNSNames:     []string{hostname},
 		SerialNumber: big.NewInt(1),
 		NotBefore:    time.Now().Add(-24 * time.Hour),
-		NotAfter:     time.Now().Add(30 * 24 * time.Hour),
+		NotAfter:     time.Now().Add(certValidityPeriod),
 	}
 	certDER, err := x509.CreateCertificate(rand.Reader, certTemplate, hostCert, ephemeralKey.Public(), key)
 	if err != nil {
@@ -80,7 +82,7 @@ func keyToCertificate(sk ic.PrivKey) (interface{}, *x509.Certificate, error) {
 	tmpl := &x509.Certificate{
 		SerialNumber: sn,
 		NotBefore:    time.Now().Add(-24 * time.Hour),
-		NotAfter:     time.Now().Add(30 * 24 * time.Hour),
+		NotAfter:     time.Now().Add(certValidityPeriod),
 		IsCA:         true,
 		BasicConstraintsValid: true,
 	}
