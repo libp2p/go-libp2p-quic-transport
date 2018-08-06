@@ -57,15 +57,27 @@ func generateConfig(privKey ic.PrivKey) (*tls.Config, error) {
 }
 
 func getRemotePubKey(chain []*x509.Certificate) (ic.PubKey, error) {
-	if len(chain) != 2 {
-		return nil, errors.New("expected 2 certificates in the chain")
+	if len(chain) == 0 || len(chain) > 4 {
+		return nil, errors.New("expected between 1 and 4 certificates in the chain")
 	}
-	pool := x509.NewCertPool()
-	pool.AddCert(chain[1])
-	if _, err := chain[0].Verify(x509.VerifyOptions{Roots: pool}); err != nil {
+	rootCert := chain[len(chain)-1]
+	roots := x509.NewCertPool()
+	roots.AddCert(rootCert) // the last certificate is the root CA cert
+	var intermediates *x509.CertPool
+	if len(chain) > 2 {
+		intermediates = x509.NewCertPool()
+		for i := 1; i < len(chain)-1; i++ {
+			intermediates.AddCert(chain[i])
+		}
+	}
+	verifyOpts := x509.VerifyOptions{
+		Roots:         roots,
+		Intermediates: intermediates,
+	}
+	if _, err := chain[0].Verify(x509.VerifyOptions{Roots: roots}); err != nil {
 		return nil, err
 	}
-	remotePubKey, err := x509.MarshalPKIXPublicKey(chain[1].PublicKey)
+	remotePubKey, err := x509.MarshalPKIXPublicKey(rootCert.PublicKey)
 	if err != nil {
 		return nil, err
 	}
