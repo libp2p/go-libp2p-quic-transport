@@ -19,11 +19,11 @@ import (
 )
 
 var quicConfig = &quic.Config{
+	Versions:                              []quic.VersionNumber{quic.VersionMilestone0_9_0},
 	MaxIncomingStreams:                    1000,
 	MaxIncomingUniStreams:                 -1,              // disable unidirectional streams
 	MaxReceiveStreamFlowControlWindow:     3 * (1 << 20),   // 3 MB
 	MaxReceiveConnectionFlowControlWindow: 4.5 * (1 << 20), // 4.5 MB
-	Versions: []quic.VersionNumber{101},
 	AcceptCookie: func(clientAddr net.Addr, cookie *quic.Cookie) bool {
 		// TODO(#6): require source address validation when under load
 		return true

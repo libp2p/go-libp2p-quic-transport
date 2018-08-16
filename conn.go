@@ -25,7 +25,7 @@ type conn struct {
 var _ tpt.Conn = &conn{}
 
 func (c *conn) Close() error {
-	return c.sess.Close(nil)
+	return c.sess.Close()
 }
 
 // IsClosed returns whether a connection is fully closed.
