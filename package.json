@@ -15,9 +15,9 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmYr9RHifaqHTFZdAsUPLmiMAi2oNeEqA48AFKxXJAsLpJ",
+      "hash": "QmcDUyb52N62J8ZamGgUWUyWc1MtuCBce7WFA4D9xA6cwF",
       "name": "go-libp2p-transport",
-      "version": "3.0.7"
+      "version": "3.0.8"
     }
   ],
   "gxVersion": "0.11.0",
