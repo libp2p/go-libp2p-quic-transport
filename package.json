@@ -15,9 +15,9 @@
     },
     {
       "author": "whyrusleeping",
-      "hash": "QmU129xU8dM79BgR97hu4fsiUDkTQrNHbzkiYfyrkNci8o",
+      "hash": "QmUFARWmz7LKUCzoWn1M3Z4Q2F8NK319452CBVFu4AgwzL",
       "name": "go-libp2p-transport",
-      "version": "3.0.9"
+      "version": "3.0.10"
     }
   ],
   "gxVersion": "0.11.0",
@@ -25,6 +25,6 @@
   "license": "",
   "name": "go-libp2p-quic-transport",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "0.2.4"
+  "version": "0.2.5"
 }
 
