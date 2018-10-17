@@ -9,7 +9,6 @@ import (
 	tpt "github.com/libp2p/go-libp2p-transport"
 	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr-net"
 )
 
 var quicListenAddr = quic.ListenAddr
@@ -17,7 +16,8 @@ var quicListenAddr = quic.ListenAddr
 // A listener listens for QUIC connections.
 type listener struct {
 	quicListener quic.Listener
-	transport    tpt.Transport
+	transport    *transport
+	conn         net.PacketConn
 
 	privKey        ic.PrivKey
 	localPeer      peer.ID
@@ -26,16 +26,8 @@ type listener struct {
 
 var _ tpt.Listener = &listener{}
 
-func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, key ic.PrivKey, tlsConf *tls.Config) (tpt.Listener, error) {
-	lnet, host, err := manet.DialArgs(addr)
-	if err != nil {
-		return nil, err
-	}
-	laddr, err := net.ResolveUDPAddr(lnet, host)
-	if err != nil {
-		return nil, err
-	}
-	conn, err := net.ListenUDP(lnet, laddr)
+func newListener(addr ma.Multiaddr, transport *transport, localPeer peer.ID, key ic.PrivKey, tlsConf *tls.Config) (tpt.Listener, error) {
+	conn, err := transport.connManager.listenUDP(addr)
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +42,7 @@ func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, 
 	return &listener{
 		quicListener:   ln,
 		transport:      transport,
+		conn:           conn,
 		privKey:        key,
 		localPeer:      localPeer,
 		localMultiaddr: localMultiaddr,
@@ -99,6 +92,15 @@ func (l *listener) setupConn(sess quic.Session) (tpt.Conn, error) {
 
 // Close closes the listener.
 func (l *listener) Close() error {
+	network := l.conn.LocalAddr().Network()
+	l.transport.connManager.mu.Lock()
+	switch network {
+	case "udp4":
+		delete(l.transport.connManager.ipv4Conns, l.conn)
+	case "udp6":
+		delete(l.transport.connManager.ipv6Conns, l.conn)
+	}
+	l.transport.connManager.mu.Unlock()
 	return l.quicListener.Close()
 }
 

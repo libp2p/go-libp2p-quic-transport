@@ -32,27 +32,73 @@ var quicConfig = &quic.Config{
 }
 
 type connManager struct {
-	connIPv4Once sync.Once
-	connIPv4     net.PacketConn
-
-	connIPv6Once sync.Once
-	connIPv6     net.PacketConn
+	mu sync.Mutex
+	// underhood PacketConn to its (re)use count
+	ipv4Conns map[net.PacketConn]int
+	ipv6Conns map[net.PacketConn]int
 }
 
-func (c *connManager) GetConnForAddr(network string) (net.PacketConn, error) {
+func newConnManager() *connManager {
+	return &connManager{
+		ipv4Conns: make(map[net.PacketConn]int),
+		ipv6Conns: make(map[net.PacketConn]int),
+	}
+}
+
+func pickDialConn(conns map[net.PacketConn]int, remoteHostIP net.IP) net.PacketConn {
+	backup := make([]net.PacketConn, 0, len(conns))
+	for conn := range conns {
+		addr := conn.LocalAddr().(*net.UDPAddr)
+		if addr.IP.IsLoopback() && remoteHostIP.IsGlobalUnicast() {
+			continue
+		}
+		if addr.IP.IsLoopback() && remoteHostIP.IsLoopback() {
+			return conn
+		}
+		if (addr.IP.IsUnspecified() || addr.IP.IsGlobalUnicast()) && remoteHostIP.IsGlobalUnicast() {
+			return conn
+		}
+		if (addr.IP.IsUnspecified() || addr.IP.IsGlobalUnicast()) && remoteHostIP.IsLoopback() {
+			backup = append(backup, conn)
+		}
+	}
+	if len(backup) > 0 {
+		return backup[0]
+	}
+	return nil
+}
+
+func (c *connManager) GetConnForAddr(network, host string) (net.PacketConn, error) {
+	remoteAddr, err := net.ResolveUDPAddr(network, host)
+	if err != nil {
+		return nil, err
+	}
+
 	switch network {
 	case "udp4":
-		var err error
-		c.connIPv4Once.Do(func() {
-			c.connIPv4, err = c.createConn(network, "0.0.0.0:0")
-		})
-		return c.connIPv4, err
+		conn := pickDialConn(c.ipv4Conns, remoteAddr.IP)
+		if conn == nil {
+			conn, err = c.createConn(network, "0.0.0.0:0")
+			if err != nil {
+				return nil, err
+			}
+		}
+		c.mu.Lock()
+		c.ipv4Conns[conn] += 1
+		c.mu.Unlock()
+		return conn, nil
 	case "udp6":
-		var err error
-		c.connIPv6Once.Do(func() {
-			c.connIPv6, err = c.createConn(network, ":0")
-		})
-		return c.connIPv6, err
+		conn := pickDialConn(c.ipv6Conns, remoteAddr.IP)
+		if conn == nil {
+			conn, err = c.createConn(network, ":0")
+			if err != nil {
+				return nil, err
+			}
+		}
+		c.mu.Lock()
+		c.ipv6Conns[conn] += 1
+		c.mu.Unlock()
+		return conn, nil
 	default:
 		return nil, fmt.Errorf("unsupported network: %s", network)
 	}
@@ -64,6 +110,25 @@ func (c *connManager) createConn(network, host string) (net.PacketConn, error) {
 		return nil, err
 	}
 	return net.ListenUDP(network, addr)
+}
+
+func (c *connManager) listenUDP(addr ma.Multiaddr) (net.PacketConn, error) {
+	network, host, err := manet.DialArgs(addr)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := c.createConn(network, host)
+	if err == nil {
+		c.mu.Lock()
+		switch network {
+		case "udp4":
+			c.ipv4Conns[conn] = 0
+		case "udp6":
+			c.ipv6Conns[conn] = 0
+		}
+		c.mu.Unlock()
+	}
+	return conn, err
 }
 
 // The Transport implements the tpt.Transport interface for QUIC connections.
@@ -91,7 +156,7 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 		privKey:     key,
 		localPeer:   localPeer,
 		tlsConf:     tlsConf,
-		connManager: &connManager{},
+		connManager: newConnManager(),
 	}, nil
 }
 
@@ -101,7 +166,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	pconn, err := t.connManager.GetConnForAddr(network)
+	pconn, err := t.connManager.GetConnForAddr(network, host)
 	if err != nil {
 		return nil, err
 	}
