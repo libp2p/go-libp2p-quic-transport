@@ -30,3 +30,57 @@ var _ = Describe("Transport", func() {
 		Expect(protocols[0]).To(Equal(ma.P_QUIC))
 	})
 })
+
+var _ = Describe("Port reuse", func() {
+	var c *connManager
+	BeforeEach(func() {
+		c = newConnManager()
+	})
+	It("reuse IPv4 port", func() {
+		addr, _ := ma.NewMultiaddr("/ip4/0.0.0.0/udp/40002/quic")
+		listenConn, err := c.listenUDP(addr)
+		Expect(err).ToNot(HaveOccurred())
+
+		dialConn, err := c.GetConnForAddr("udp4", "127.0.0.1:40003")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(dialConn).To(Equal(listenConn))
+		listenConn.Close()
+	})
+	It("reuse IPv6 port", func() {
+		addr, _ := ma.NewMultiaddr("/ip6/::/udp/40002/quic")
+		listenConn, err := c.listenUDP(addr)
+		Expect(err).ToNot(HaveOccurred())
+
+		dialConn, err := c.GetConnForAddr("udp6", "[::1]:40003")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(dialConn).To(Equal(listenConn))
+		listenConn.Close()
+	})
+	It("listen after dial won't reuse conn", func() {
+		dialConn, err := c.GetConnForAddr("udp4", "127.0.0.1:40003")
+		Expect(err).ToNot(HaveOccurred())
+
+		addr, _ := ma.NewMultiaddr("/ip4/0.0.0.0/udp/40002/quic")
+		listenConn, err := c.listenUDP(addr)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(listenConn).ToNot(Equal(dialConn))
+
+		dialConn.Close()
+		listenConn.Close()
+	})
+	It("use listen conn by default", func() {
+		dialConn, err := c.GetConnForAddr("udp4", "127.0.0.1:40003")
+		Expect(err).ToNot(HaveOccurred())
+
+		addr, _ := ma.NewMultiaddr("/ip4/0.0.0.0/udp/40002/quic")
+		listenConn, err := c.listenUDP(addr)
+		Expect(err).ToNot(HaveOccurred())
+
+		dialConn2, err := c.GetConnForAddr("udp4", "1.2.3.4:40004")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(dialConn2).To(Equal(listenConn))
+
+		dialConn.Close()
+		listenConn.Close()
+	})
+})
