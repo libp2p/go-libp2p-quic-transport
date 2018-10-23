@@ -92,15 +92,22 @@ func (l *listener) setupConn(sess quic.Session) (tpt.Conn, error) {
 
 // Close closes the listener.
 func (l *listener) Close() error {
+	connManager := l.transport.connManager
 	network := l.conn.LocalAddr().Network()
-	l.transport.connManager.mu.Lock()
+	connManager.mu.Lock()
 	switch network {
 	case "udp4":
-		delete(l.transport.connManager.ipv4Conns, l.conn)
+		delete(connManager.ipv4Conns, l.conn)
 	case "udp6":
-		delete(l.transport.connManager.ipv6Conns, l.conn)
+		delete(connManager.ipv6Conns, l.conn)
+	default: // for "udp" and other cases, try to delete both
+		delete(connManager.ipv4Conns, l.conn)
+		delete(connManager.ipv6Conns, l.conn)
 	}
-	l.transport.connManager.mu.Unlock()
+	if l.conn == connManager.defaultConn {
+		connManager.defaultConn = nil
+	}
+	connManager.mu.Unlock()
 	return l.quicListener.Close()
 }
 

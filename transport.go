@@ -31,74 +31,88 @@ var quicConfig = &quic.Config{
 	KeepAlive: true,
 }
 
+type addrType int
+
+const (
+	other       addrType = 0
+	loopback    addrType = 1
+	global      addrType = 2
+	unspecified addrType = 3
+)
+
 type connManager struct {
-	mu sync.Mutex
-	// underhood PacketConn to its (re)use count
-	ipv4Conns map[net.PacketConn]int
-	ipv6Conns map[net.PacketConn]int
+	mu          sync.Mutex
+	defaultConn net.PacketConn
+	// map underhood PacketConn -> connection remote address type(usage of the conn)
+	ipv4Conns map[net.PacketConn]addrType
+	ipv6Conns map[net.PacketConn]addrType
 }
 
 func newConnManager() *connManager {
 	return &connManager{
-		ipv4Conns: make(map[net.PacketConn]int),
-		ipv6Conns: make(map[net.PacketConn]int),
+		ipv4Conns: make(map[net.PacketConn]addrType),
+		ipv6Conns: make(map[net.PacketConn]addrType),
 	}
 }
 
-func pickDialConn(conns map[net.PacketConn]int, remoteHostIP net.IP) net.PacketConn {
-	backup := make([]net.PacketConn, 0, len(conns))
-	for conn := range conns {
-		addr := conn.LocalAddr().(*net.UDPAddr)
-		if addr.IP.IsLoopback() && remoteHostIP.IsGlobalUnicast() {
-			continue
-		}
-		if addr.IP.IsLoopback() && remoteHostIP.IsLoopback() {
-			return conn
-		}
-		if (addr.IP.IsUnspecified() || addr.IP.IsGlobalUnicast()) && remoteHostIP.IsGlobalUnicast() {
-			return conn
-		}
-		if (addr.IP.IsUnspecified() || addr.IP.IsGlobalUnicast()) && remoteHostIP.IsLoopback() {
-			backup = append(backup, conn)
-		}
+func typeOfIP(ipAddr net.IP) addrType {
+	if ipAddr.IsLoopback() {
+		return loopback
 	}
-	if len(backup) > 0 {
-		return backup[0]
+	if ipAddr.IsUnspecified() {
+		return unspecified
 	}
-	return nil
+	if ipAddr.IsGlobalUnicast() {
+		return global
+	}
+	return other
 }
 
-func (c *connManager) GetConnForAddr(network, host string) (net.PacketConn, error) {
-	remoteAddr, err := net.ResolveUDPAddr(network, host)
+func (c *connManager) pickDialConn(conns map[net.PacketConn]addrType, remoteHostIP net.IP) net.PacketConn {
+	remoteAddrType := typeOfIP(remoteHostIP)
+	for conn, connAddrType := range conns {
+		if c.defaultConn == nil && connAddrType == unspecified {
+			c.defaultConn = conn
+		}
+		if connAddrType == remoteAddrType {
+			return conn
+		}
+	}
+	return c.defaultConn
+}
+
+func (c *connManager) getConnForAddr(network, listenHost string, remoteHostIP net.IP,
+	conns map[net.PacketConn]addrType) (conn net.PacketConn, err error) {
+
+	c.mu.Lock()
+	conn = c.pickDialConn(conns, remoteHostIP)
+	c.mu.Unlock()
+	if conn != nil {
+		return conn, nil
+	}
+
+	conn, err = c.createConn(network, listenHost)
+	if err != nil {
+		return nil, err
+	}
+	connAddrType := typeOfIP(remoteHostIP)
+	c.mu.Lock()
+	conns[conn] = connAddrType
+	c.mu.Unlock()
+	return conn, nil
+}
+
+func (c *connManager) GetConnForAddr(network, remoteHost string) (net.PacketConn, error) {
+	remoteAddr, err := net.ResolveUDPAddr(network, remoteHost)
 	if err != nil {
 		return nil, err
 	}
 
 	switch network {
 	case "udp4":
-		conn := pickDialConn(c.ipv4Conns, remoteAddr.IP)
-		if conn == nil {
-			conn, err = c.createConn(network, "0.0.0.0:0")
-			if err != nil {
-				return nil, err
-			}
-		}
-		c.mu.Lock()
-		c.ipv4Conns[conn] += 1
-		c.mu.Unlock()
-		return conn, nil
+		return c.getConnForAddr(network, "0.0.0.0:0", remoteAddr.IP, c.ipv4Conns)
 	case "udp6":
-		conn := pickDialConn(c.ipv6Conns, remoteAddr.IP)
-		if conn == nil {
-			conn, err = c.createConn(network, ":0")
-			if err != nil {
-				return nil, err
-			}
-		}
-		c.mu.Lock()
-		c.ipv6Conns[conn] += 1
-		c.mu.Unlock()
-		return conn, nil
+		return c.getConnForAddr(network, ":0", remoteAddr.IP, c.ipv6Conns)
 	default:
 		return nil, fmt.Errorf("unsupported network: %s", network)
 	}
@@ -122,9 +136,9 @@ func (c *connManager) listenUDP(addr ma.Multiaddr) (net.PacketConn, error) {
 		c.mu.Lock()
 		switch network {
 		case "udp4":
-			c.ipv4Conns[conn] = 0
+			c.ipv4Conns[conn] = unspecified
 		case "udp6":
-			c.ipv6Conns[conn] = 0
+			c.ipv6Conns[conn] = unspecified
 		}
 		c.mu.Unlock()
 	}
