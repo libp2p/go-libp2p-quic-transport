@@ -1,6 +1,8 @@
 package libp2pquic
 
 import (
+	"context"
+
 	ic "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"
 	tpt "github.com/libp2p/go-libp2p-transport"
@@ -26,6 +28,10 @@ var _ tpt.Conn = &conn{}
 
 func (c *conn) Close() error {
 	return c.sess.Close()
+}
+
+func (c *conn) Context() context.Context {
+	return c.sess.Context()
 }
 
 // IsClosed returns whether a connection is fully closed.
