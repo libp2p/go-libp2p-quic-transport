@@ -54,7 +54,9 @@ var _ = Describe("Connection", func() {
 
 	// modify the cert chain such that verificiation will fail
 	invalidateCertChain := func(tlsConf *tls.Config) {
-		tlsConf.Certificates[0].Certificate = [][]byte{tlsConf.Certificates[0].Certificate[0]}
+		key, err := rsa.GenerateKey(rand.Reader, 1024)
+		Expect(err).ToNot(HaveOccurred())
+		tlsConf.Certificates[0].PrivateKey = key
 	}
 
 	BeforeEach(func() {
@@ -147,8 +149,8 @@ var _ = Describe("Connection", func() {
 		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
 		clientTransport, err := NewTransport(clientKey)
-		invalidateCertChain(clientTransport.(*transport).tlsConf)
 		Expect(err).ToNot(HaveOccurred())
+		invalidateCertChain(clientTransport.(*transport).tlsConf)
 		conn, err := clientTransport.Dial(context.Background(), serverAddr, serverID)
 		Expect(err).ToNot(HaveOccurred())
 		Eventually(func() bool { return conn.IsClosed() }).Should(BeTrue())
@@ -157,15 +159,15 @@ var _ = Describe("Connection", func() {
 
 	It("fails if the server presents an invalid cert chain", func() {
 		serverTransport, err := NewTransport(serverKey)
-		invalidateCertChain(serverTransport.(*transport).tlsConf)
 		Expect(err).ToNot(HaveOccurred())
+		invalidateCertChain(serverTransport.(*transport).tlsConf)
 		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
 		clientTransport, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
 		_, err = clientTransport.Dial(context.Background(), serverAddr, serverID)
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("TLS handshake error: bad certificate"))
+		Expect(err.Error()).To(ContainSubstring("TLS handshake error"))
 		Consistently(serverConnChan).ShouldNot(Receive())
 	})
 
@@ -176,8 +178,8 @@ var _ = Describe("Connection", func() {
 
 		// first dial with an invalid cert chain
 		clientTransport1, err := NewTransport(clientKey)
-		invalidateCertChain(clientTransport1.(*transport).tlsConf)
 		Expect(err).ToNot(HaveOccurred())
+		invalidateCertChain(clientTransport1.(*transport).tlsConf)
 		_, err = clientTransport1.Dial(context.Background(), serverAddr, serverID)
 		Expect(err).ToNot(HaveOccurred())
 		Consistently(serverConnChan).ShouldNot(Receive())
