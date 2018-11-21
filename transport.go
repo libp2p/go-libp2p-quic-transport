@@ -143,6 +143,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	}
 	return &conn{
 		sess:            sess,
+		transport:       t,
 		privKey:         t.privKey,
 		localPeer:       t.localPeer,
 		localMultiaddr:  localMultiaddr,
