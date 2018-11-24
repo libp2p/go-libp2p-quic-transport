@@ -11,10 +11,60 @@ import (
 	"github.com/gogo/protobuf/proto"
 	ic "github.com/libp2p/go-libp2p-crypto"
 	pb "github.com/libp2p/go-libp2p-crypto/pb"
+	peer "github.com/libp2p/go-libp2p-peer"
 )
 
 // mint certificate selection is broken.
 const hostname = "quic.ipfs"
+
+// Identity is used to secure connections
+type Identity struct {
+	*tls.Config
+}
+
+// NewIdentity creates a new identity
+func NewIdentity(privKey ic.PrivKey) (*Identity, error) {
+	conf, err := generateConfig(privKey)
+	if err != nil {
+		return nil, err
+	}
+	return &Identity{conf}, nil
+}
+
+// ConfigForPeer creates a new tls.Config that verifies the peers certificate chain.
+// It should be used to create a new tls.Config before dialing.
+func (i *Identity) ConfigForPeer(remote peer.ID) *tls.Config {
+	// We need to check the peer ID in the VerifyPeerCertificate callback.
+	// The tls.Config it is also used for listening, and we might also have concurrent dials.
+	// Clone it so we can check for the specific peer ID we're dialing here.
+	conf := i.Config.Clone()
+	// We're using InsecureSkipVerify, so the verifiedChains parameter will always be empty.
+	// We need to parse the certificates ourselves from the raw certs.
+	conf.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+		chain := make([]*x509.Certificate, len(rawCerts))
+		for i := 0; i < len(rawCerts); i++ {
+			cert, err := x509.ParseCertificate(rawCerts[i])
+			if err != nil {
+				return err
+			}
+			chain[i] = cert
+		}
+		pubKey, err := getRemotePubKey(chain)
+		if err != nil {
+			return err
+		}
+		if !remote.MatchesPublicKey(pubKey) {
+			return errors.New("peer IDs don't match")
+		}
+		return nil
+	}
+	return conf
+}
+
+// KeyFromChain takes a chain of x509.Certificates and returns the peer's public key.
+func KeyFromChain(chain []*x509.Certificate) (ic.PubKey, error) {
+	return getRemotePubKey(chain)
+}
 
 const certValidityPeriod = 180 * 24 * time.Hour
 

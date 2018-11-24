@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
 	"time"
@@ -53,10 +52,10 @@ var _ = Describe("Connection", func() {
 	}
 
 	// modify the cert chain such that verificiation will fail
-	invalidateCertChain := func(tlsConf *tls.Config) {
+	invalidateCertChain := func(identity *Identity) {
 		key, err := rsa.GenerateKey(rand.Reader, 1024)
 		Expect(err).ToNot(HaveOccurred())
-		tlsConf.Certificates[0].PrivateKey = key
+		identity.Config.Certificates[0].PrivateKey = key
 	}
 
 	BeforeEach(func() {
@@ -150,7 +149,7 @@ var _ = Describe("Connection", func() {
 
 		clientTransport, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
-		invalidateCertChain(clientTransport.(*transport).tlsConf)
+		invalidateCertChain(clientTransport.(*transport).identity)
 		conn, err := clientTransport.Dial(context.Background(), serverAddr, serverID)
 		Expect(err).ToNot(HaveOccurred())
 		Eventually(func() bool { return conn.IsClosed() }).Should(BeTrue())
@@ -160,7 +159,7 @@ var _ = Describe("Connection", func() {
 	It("fails if the server presents an invalid cert chain", func() {
 		serverTransport, err := NewTransport(serverKey)
 		Expect(err).ToNot(HaveOccurred())
-		invalidateCertChain(serverTransport.(*transport).tlsConf)
+		invalidateCertChain(serverTransport.(*transport).identity)
 		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
 		clientTransport, err := NewTransport(clientKey)
@@ -179,7 +178,7 @@ var _ = Describe("Connection", func() {
 		// first dial with an invalid cert chain
 		clientTransport1, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
-		invalidateCertChain(clientTransport1.(*transport).tlsConf)
+		invalidateCertChain(clientTransport1.(*transport).identity)
 		_, err = clientTransport1.Dial(context.Background(), serverAddr, serverID)
 		Expect(err).ToNot(HaveOccurred())
 		Consistently(serverConnChan).ShouldNot(Receive())
