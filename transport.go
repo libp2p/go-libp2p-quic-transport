@@ -2,19 +2,17 @@ package libp2pquic
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
-	"errors"
 	"fmt"
 	"net"
 	"sync"
 
 	ic "github.com/libp2p/go-libp2p-crypto"
-	peer "github.com/libp2p/go-libp2p-peer"
+	"github.com/libp2p/go-libp2p-peer"
+	tls "github.com/libp2p/go-libp2p-tls"
 	tpt "github.com/libp2p/go-libp2p-transport"
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr-net"
+	"github.com/multiformats/go-multiaddr-net"
 	"github.com/whyrusleeping/mafmt"
 )
 
@@ -70,7 +68,7 @@ func (c *connManager) createConn(network, host string) (net.PacketConn, error) {
 type transport struct {
 	privKey     ic.PrivKey
 	localPeer   peer.ID
-	tlsConf     *tls.Config
+	identity    *tls.Identity
 	connManager *connManager
 }
 
@@ -82,7 +80,7 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 	if err != nil {
 		return nil, err
 	}
-	tlsConf, err := generateConfig(key)
+	ident, err := tls.NewIdentity(key)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +88,7 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 	return &transport{
 		privKey:     key,
 		localPeer:   localPeer,
-		tlsConf:     tlsConf,
+		identity:    ident,
 		connManager: &connManager{},
 	}, nil
 }
@@ -109,30 +107,9 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	var remotePubKey ic.PubKey
-	tlsConf := t.tlsConf.Clone()
-	// We need to check the peer ID in the VerifyPeerCertificate callback.
-	// The tls.Config it is also used for listening, and we might also have concurrent dials.
-	// Clone it so we can check for the specific peer ID we're dialing here.
-	tlsConf.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
-		chain := make([]*x509.Certificate, len(rawCerts))
-		for i := 0; i < len(rawCerts); i++ {
-			cert, err := x509.ParseCertificate(rawCerts[i])
-			if err != nil {
-				return err
-			}
-			chain[i] = cert
-		}
-		var err error
-		remotePubKey, err = getRemotePubKey(chain)
-		if err != nil {
-			return err
-		}
-		if !p.MatchesPublicKey(remotePubKey) {
-			return errors.New("peer IDs don't match")
-		}
-		return nil
-	}
+
+	tlsConf, remotePubKey := t.identity.ConfigForPeer(p)
+
 	sess, err := quic.DialContext(ctx, pconn, addr, host, tlsConf, quicConfig)
 	if err != nil {
 		return nil, err
@@ -141,13 +118,14 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
+
 	return &conn{
 		sess:            sess,
 		transport:       t,
 		privKey:         t.privKey,
 		localPeer:       t.localPeer,
 		localMultiaddr:  localMultiaddr,
-		remotePubKey:    remotePubKey,
+		remotePubKey:    *remotePubKey,
 		remotePeerID:    p,
 		remoteMultiaddr: raddr,
 	}, nil
@@ -160,7 +138,7 @@ func (t *transport) CanDial(addr ma.Multiaddr) bool {
 
 // Listen listens for new QUIC connections on the passed multiaddr.
 func (t *transport) Listen(addr ma.Multiaddr) (tpt.Listener, error) {
-	return newListener(addr, t, t.localPeer, t.privKey, t.tlsConf)
+	return newListener(addr, t, t.localPeer, t.privKey, t.identity)
 }
 
 // Proxy returns true if this transport proxies.

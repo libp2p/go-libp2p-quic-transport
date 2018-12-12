@@ -1,11 +1,11 @@
 package libp2pquic
 
 import (
-	"crypto/tls"
 	"net"
 
 	ic "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"
+	tls "github.com/libp2p/go-libp2p-tls"
 	tpt "github.com/libp2p/go-libp2p-transport"
 	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
@@ -26,7 +26,7 @@ type listener struct {
 
 var _ tpt.Listener = &listener{}
 
-func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, key ic.PrivKey, tlsConf *tls.Config) (tpt.Listener, error) {
+func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, key ic.PrivKey, identity *tls.Identity) (tpt.Listener, error) {
 	lnet, host, err := manet.DialArgs(addr)
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, 
 	if err != nil {
 		return nil, err
 	}
-	ln, err := quic.Listen(conn, tlsConf, quicConfig)
+	ln, err := quic.Listen(conn, identity.Config, quicConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (l *listener) Accept() (tpt.Conn, error) {
 }
 
 func (l *listener) setupConn(sess quic.Session) (tpt.Conn, error) {
-	remotePubKey, err := getRemotePubKey(sess.ConnectionState().PeerCertificates)
+	remotePubKey, err := tls.KeyFromChain(sess.ConnectionState().PeerCertificates)
 	if err != nil {
 		return nil, err
 	}

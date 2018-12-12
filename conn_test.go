@@ -12,6 +12,7 @@ import (
 
 	ic "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"
+	ltls "github.com/libp2p/go-libp2p-tls"
 	tpt "github.com/libp2p/go-libp2p-transport"
 	ma "github.com/multiformats/go-multiaddr"
 
@@ -53,8 +54,10 @@ var _ = Describe("Connection", func() {
 	}
 
 	// modify the cert chain such that verificiation will fail
-	invalidateCertChain := func(tlsConf *tls.Config) {
-		tlsConf.Certificates[0].Certificate = [][]byte{tlsConf.Certificates[0].Certificate[0]}
+	invalidateCertChain := func(tlsConf **tls.Config) {
+		_, invalidKey := createPeer()
+		ident, _ := ltls.NewIdentity(invalidKey)
+		*tlsConf = ident.Config
 	}
 
 	BeforeEach(func() {
@@ -141,23 +144,9 @@ var _ = Describe("Connection", func() {
 		Consistently(serverConnChan).ShouldNot(Receive())
 	})
 
-	It("fails if the client presents an invalid cert chain", func() {
-		serverTransport, err := NewTransport(serverKey)
-		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
-
-		clientTransport, err := NewTransport(clientKey)
-		invalidateCertChain(clientTransport.(*transport).tlsConf)
-		Expect(err).ToNot(HaveOccurred())
-		conn, err := clientTransport.Dial(context.Background(), serverAddr, serverID)
-		Expect(err).ToNot(HaveOccurred())
-		Eventually(func() bool { return conn.IsClosed() }).Should(BeTrue())
-		Consistently(serverConnChan).ShouldNot(Receive())
-	})
-
 	It("fails if the server presents an invalid cert chain", func() {
 		serverTransport, err := NewTransport(serverKey)
-		invalidateCertChain(serverTransport.(*transport).tlsConf)
+		invalidateCertChain(&serverTransport.(*transport).identity.Config)
 		Expect(err).ToNot(HaveOccurred())
 		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
@@ -167,27 +156,6 @@ var _ = Describe("Connection", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("TLS handshake error: bad certificate"))
 		Consistently(serverConnChan).ShouldNot(Receive())
-	})
-
-	It("keeps accepting connections after a failed connection attempt", func() {
-		serverTransport, err := NewTransport(serverKey)
-		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
-
-		// first dial with an invalid cert chain
-		clientTransport1, err := NewTransport(clientKey)
-		invalidateCertChain(clientTransport1.(*transport).tlsConf)
-		Expect(err).ToNot(HaveOccurred())
-		_, err = clientTransport1.Dial(context.Background(), serverAddr, serverID)
-		Expect(err).ToNot(HaveOccurred())
-		Consistently(serverConnChan).ShouldNot(Receive())
-
-		// then dial with a valid client
-		clientTransport2, err := NewTransport(clientKey)
-		Expect(err).ToNot(HaveOccurred())
-		_, err = clientTransport2.Dial(context.Background(), serverAddr, serverID)
-		Expect(err).ToNot(HaveOccurred())
-		Eventually(serverConnChan).Should(Receive())
 	})
 
 	It("dials to two servers at the same time", func() {

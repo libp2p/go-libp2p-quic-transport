@@ -18,6 +18,12 @@
       "hash": "Qmb3qartY8DSgRaBA3Go4EEjY1ZbXhCcvmc4orsBKMjgRg",
       "name": "go-libp2p-transport",
       "version": "3.0.20"
+    },
+    {
+      "author": "whyrusleeping",
+      "hash": "QmUT6HZJnZhpZPiCtrsBmRnpfbysEgBNJESVQe8wuuezX6",
+      "name": "go-libp2p-tls",
+      "version": "0.1.0"
     }
   ],
   "gxVersion": "0.11.0",
