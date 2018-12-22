@@ -39,18 +39,18 @@ type connManager struct {
 	connIPv6     net.PacketConn
 }
 
-func (c *connManager) GetConnForAddr(network string) (net.PacketConn, error) {
+func (c *connManager) GetConnForAddr(network, host string) (net.PacketConn, error) {
 	switch network {
 	case "udp4":
 		var err error
 		c.connIPv4Once.Do(func() {
-			c.connIPv4, err = c.createConn(network, "0.0.0.0:0")
+			c.connIPv4, err = c.createConn(network, host)
 		})
 		return c.connIPv4, err
 	case "udp6":
 		var err error
 		c.connIPv6Once.Do(func() {
-			c.connIPv6, err = c.createConn(network, ":0")
+			c.connIPv6, err = c.createConn(network, host)
 		})
 		return c.connIPv6, err
 	default:
@@ -101,7 +101,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	pconn, err := t.connManager.GetConnForAddr(network)
+	pconn, err := t.connManager.GetConnForAddr(network, "0.0.0.0:0")
 	if err != nil {
 		return nil, err
 	}
