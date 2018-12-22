@@ -101,7 +101,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	pconn, err := t.connManager.GetConnForAddr(network, "0.0.0.0:0")
+	pconn, err := t.connManager.GetConnForAddr(network, "")
 	if err != nil {
 		return nil, err
 	}
