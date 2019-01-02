@@ -104,8 +104,11 @@ func (l *listener) Close() error {
 		delete(connManager.ipv4Conns, l.conn)
 		delete(connManager.ipv6Conns, l.conn)
 	}
-	if l.conn == connManager.defaultConn {
-		connManager.defaultConn = nil
+	if l.conn == connManager.defaultIpv4Conn {
+		connManager.defaultIpv4Conn = nil
+	}
+	if l.conn == connManager.defaultIpv6Conn {
+		connManager.defaultIpv6Conn = nil
 	}
 	connManager.mu.Unlock()
 	return l.quicListener.Close()

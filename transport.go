@@ -34,15 +34,16 @@ var quicConfig = &quic.Config{
 type addrType int
 
 const (
-	other       addrType = 0
-	loopback    addrType = 1
-	global      addrType = 2
-	unspecified addrType = 3
+	addrTypeOther addrType = iota
+	addrTypeLoopback
+	addrTypeGlobal
+	addrTypeUnspecified
 )
 
 type connManager struct {
-	mu          sync.Mutex
-	defaultConn net.PacketConn
+	mu              sync.Mutex
+	defaultIpv4Conn net.PacketConn
+	defaultIpv6Conn net.PacketConn
 	// map underhood PacketConn -> connection remote address type(usage of the conn)
 	ipv4Conns map[net.PacketConn]addrType
 	ipv6Conns map[net.PacketConn]addrType
@@ -57,65 +58,80 @@ func newConnManager() *connManager {
 
 func typeOfIP(ipAddr net.IP) addrType {
 	if ipAddr.IsLoopback() {
-		return loopback
+		return addrTypeLoopback
 	}
 	if ipAddr.IsUnspecified() {
-		return unspecified
+		return addrTypeUnspecified
 	}
 	if ipAddr.IsGlobalUnicast() {
-		return global
+		return addrTypeGlobal
 	}
-	return other
+	return addrTypeOther
 }
 
-func (c *connManager) pickDialConn(conns map[net.PacketConn]addrType, remoteHostIP net.IP) net.PacketConn {
-	remoteAddrType := typeOfIP(remoteHostIP)
-	for conn, connAddrType := range conns {
-		if c.defaultConn == nil && connAddrType == unspecified {
-			c.defaultConn = conn
-		}
-		if connAddrType == remoteAddrType {
-			return conn
-		}
-	}
-	return c.defaultConn
-}
-
-func (c *connManager) getConnForAddr(network, listenHost string, remoteHostIP net.IP,
-	conns map[net.PacketConn]addrType) (conn net.PacketConn, err error) {
-
-	c.mu.Lock()
-	conn = c.pickDialConn(conns, remoteHostIP)
-	c.mu.Unlock()
-	if conn != nil {
-		return conn, nil
-	}
-
-	conn, err = c.createConn(network, listenHost)
-	if err != nil {
-		return nil, err
-	}
-	connAddrType := typeOfIP(remoteHostIP)
-	c.mu.Lock()
-	conns[conn] = connAddrType
-	c.mu.Unlock()
-	return conn, nil
-}
-
+// GetConnForAddr try to reuse exist connections when possible
 func (c *connManager) GetConnForAddr(network, remoteHost string) (net.PacketConn, error) {
 	remoteAddr, err := net.ResolveUDPAddr(network, remoteHost)
 	if err != nil {
 		return nil, err
 	}
 
+	var listenHost string
+	var conns map[net.PacketConn]addrType
+	var defaultConn func() net.PacketConn
+	var setDefaultConn func(conn net.PacketConn)
 	switch network {
 	case "udp4":
-		return c.getConnForAddr(network, "0.0.0.0:0", remoteAddr.IP, c.ipv4Conns)
+		listenHost = "0.0.0.0:0"
+		conns = c.ipv4Conns
+		defaultConn = func() net.PacketConn {
+			return c.defaultIpv4Conn
+		}
+		setDefaultConn = func(conn net.PacketConn) {
+			c.defaultIpv4Conn = conn
+		}
 	case "udp6":
-		return c.getConnForAddr(network, ":0", remoteAddr.IP, c.ipv6Conns)
+		listenHost = ":0"
+		conns = c.ipv6Conns
+		defaultConn = func() net.PacketConn {
+			return c.defaultIpv6Conn
+		}
+		setDefaultConn = func(conn net.PacketConn) {
+			c.defaultIpv6Conn = conn
+		}
 	default:
 		return nil, fmt.Errorf("unsupported network: %s", network)
 	}
+
+	// check if there exists a connection of expected type
+	var pickedConn net.PacketConn
+	c.mu.Lock()
+	remoteAddrType := typeOfIP(remoteAddr.IP)
+	for conn, connAddrType := range conns {
+		if defaultConn() == nil && connAddrType == addrTypeUnspecified {
+			setDefaultConn(conn)
+		}
+		if connAddrType == remoteAddrType {
+			pickedConn = conn
+			break
+		}
+	}
+	if pickedConn == nil {
+		pickedConn = defaultConn()
+	}
+	c.mu.Unlock()
+	if pickedConn != nil {
+		return pickedConn, nil
+	}
+	// could not reuse an exist connection, create a new one
+	conn, err := c.createConn(network, listenHost)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	conns[conn] = remoteAddrType
+	c.mu.Unlock()
+	return conn, nil
 }
 
 func (c *connManager) createConn(network, host string) (net.PacketConn, error) {
@@ -132,17 +148,18 @@ func (c *connManager) listenUDP(addr ma.Multiaddr) (net.PacketConn, error) {
 		return nil, err
 	}
 	conn, err := c.createConn(network, host)
-	if err == nil {
-		c.mu.Lock()
-		switch network {
-		case "udp4":
-			c.ipv4Conns[conn] = unspecified
-		case "udp6":
-			c.ipv6Conns[conn] = unspecified
-		}
-		c.mu.Unlock()
+	if err != nil {
+		return conn, err
 	}
-	return conn, err
+	c.mu.Lock()
+	switch network {
+	case "udp4":
+		c.ipv4Conns[conn] = addrTypeUnspecified
+	case "udp6":
+		c.ipv6Conns[conn] = addrTypeUnspecified
+	}
+	c.mu.Unlock()
+	return conn, nil
 }
 
 // The Transport implements the tpt.Transport interface for QUIC connections.
