@@ -77,10 +77,24 @@ func resolveNetworkAndAddrType(addr *net.UDPAddr) (string, error) {
 
 }
 
+// return conn which accepts connection on all interface
+func (c *connManager) connForAllInterface(network string) net.PacketConn {
+	if len(c.conn[network+AddrTypeUnspecified]) != 0 {
+		return c.conn[network+AddrTypeUnspecified][0]
+	} else {
+		return nil
+	}
+}
+
 func (c *connManager) GetConnForAddr(network, host string) (net.PacketConn, error) {
 	udpAddr, err := net.ResolveUDPAddr(network, host)
 	if err != nil {
 		return nil, err
+	}
+
+	upc := c.connForAllInterface(network)
+	if upc != nil {
+		return upc, nil
 	}
 
 	netAddrType, err := resolveNetworkAndAddrType(udpAddr)
