@@ -19,7 +19,7 @@ import (
 )
 
 var quicConfig = &quic.Config{
-	Versions:                              []quic.VersionNumber{quic.VersionMilestone0_10_0},
+	Versions:                              []quic.VersionNumber{101},
 	MaxIncomingStreams:                    1000,
 	MaxIncomingUniStreams:                 -1,              // disable unidirectional streams
 	MaxReceiveStreamFlowControlWindow:     3 * (1 << 20),   // 3 MB
@@ -102,6 +102,7 @@ func (c *connManager) GetConnForAddr(network, host string) (net.PacketConn, erro
 
 	// This network address pair has more than one PacketConn.
 	// Return the first one.
+	fmt.Println("Returning existing conn")
 	return availablePacketConnList[0], nil
 
 	/* switch network {
