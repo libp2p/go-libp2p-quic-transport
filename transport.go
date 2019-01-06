@@ -37,10 +37,74 @@ type connManager struct {
 
 	connIPv6Once sync.Once
 	connIPv6     net.PacketConn
+
+	conn map[string][]net.PacketConn // string(Network_Type:Addr_Type) -> PacketConn
+}
+
+const (
+	AddrTypeGlobalUnicast           = "0"
+	AddrTypeInterfaceLocalMulticast = "1"
+	AddrTypeLinkLocalMulticast      = "2"
+	AddrTypeLinkLocalUnicast        = "3"
+	AddrTypeLoopback                = "4"
+	AddrTypeMulticast               = "5"
+	AddrTypeUnspecified             = "6"
+)
+
+func resolveNetworkAndAddrType(addr *net.UDPAddr) (string, error) {
+	addrType := ""
+	if addr.IP.IsGlobalUnicast() {
+		addrType = AddrTypeGlobalUnicast
+	} else if addr.IP.IsInterfaceLocalMulticast() {
+		addrType = AddrTypeInterfaceLocalMulticast
+	} else if addr.IP.IsLinkLocalMulticast() {
+		addrType = AddrTypeLinkLocalMulticast
+	} else if addr.IP.IsLinkLocalUnicast() {
+		addrType = AddrTypeLinkLocalUnicast
+	} else if addr.IP.IsLoopback() {
+		addrType = AddrTypeLoopback
+	} else if addr.IP.IsMulticast() {
+		addrType = AddrTypeMulticast
+	} else if addr.IP.IsUnspecified() || addr.IP == nil {
+		addrType = AddrTypeUnspecified
+	}
+
+	if addrType == "" {
+		return "", fmt.Errorf("Invalid address type")
+	} else {
+		return addr.Network() + addrType, nil
+	}
+
 }
 
 func (c *connManager) GetConnForAddr(network, host string) (net.PacketConn, error) {
-	switch network {
+	udpAddr, err := net.ResolveUDPAddr(network, host)
+	if err != nil {
+		return nil, err
+	}
+
+	netAddrType, err := resolveNetworkAndAddrType(udpAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	availablePacketConnList := c.conn[netAddrType]
+
+	if len(availablePacketConnList) == 0 {
+		pc, err := c.createConn(network, host)
+		if err != nil {
+			return nil, err
+		}
+		c.conn[netAddrType] = append(c.conn[netAddrType], pc)
+		fmt.Println("No new conn", len(c.conn[netAddrType]))
+		return pc, nil
+	}
+
+	// This network address pair has more than one PacketConn.
+	// Return the first one.
+	return availablePacketConnList[0], nil
+
+	/* switch network {
 	case "udp4":
 		var err error
 		c.connIPv4Once.Do(func() {
@@ -55,7 +119,7 @@ func (c *connManager) GetConnForAddr(network, host string) (net.PacketConn, erro
 		return c.connIPv6, err
 	default:
 		return nil, fmt.Errorf("unsupported network: %s", network)
-	}
+	} */
 }
 
 func (c *connManager) createConn(network, host string) (net.PacketConn, error) {
@@ -88,10 +152,12 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 	}
 
 	return &transport{
-		privKey:     key,
-		localPeer:   localPeer,
-		tlsConf:     tlsConf,
-		connManager: &connManager{},
+		privKey:   key,
+		localPeer: localPeer,
+		tlsConf:   tlsConf,
+		connManager: &connManager{
+			conn: make(map[string][]net.PacketConn),
+		},
 	}, nil
 }
 
