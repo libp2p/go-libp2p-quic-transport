@@ -73,15 +73,22 @@ func resolveNetworkAndAddrType(addr *net.UDPAddr) (string, error) {
 	if addrType == "" {
 		return "", fmt.Errorf("Invalid address type")
 	} else {
-		return addr.Network() + addrType, nil
+		// addr.Network() returns "udp" (not "udp4" or "udp6")
+		if addr.IP.To4() != nil {
+			return "udp4:" + addrType, nil
+		} else {
+			return "udp6:" + addrType, nil
+		}
+
 	}
 
 }
 
 // return conn which accepts connection on all interface
 func (c *connManager) connForAllInterface(network string) net.PacketConn {
-	if len(c.conn[network+AddrTypeUnspecified]) != 0 {
-		return c.conn[network+AddrTypeUnspecified][0]
+	key := network + ":" + AddrTypeUnspecified
+	if len(c.conn[key]) != 0 {
+		return c.conn[key][0]
 	} else {
 		return nil
 	}
@@ -110,9 +117,8 @@ func (c *connManager) GetConnForAddr(network, host string) (net.PacketConn, erro
 		if err != nil {
 			return nil, err
 		}
-		fmt.Println("crated conn", pc.LocalAddr())
 		c.conn[netAddrType] = append(c.conn[netAddrType], pc)
-		fmt.Println("No new conn", len(c.conn[netAddrType]))
+		fmt.Println("Creating new conn", pc.LocalAddr(), len(c.conn[netAddrType]), netAddrType)
 		return pc, nil
 	}
 
