@@ -39,7 +39,8 @@ type connManager struct {
 	connIPv6Once sync.Once
 	connIPv6     net.PacketConn
 
-	conn map[string][]net.PacketConn // string(Network_Type:Addr_Type) -> PacketConn
+	conn           map[string][]net.PacketConn // string(Network_Type:Addr_Type) -> PacketConn
+	interfaceAddrs map[string][]string
 }
 
 const (
@@ -52,7 +53,7 @@ const (
 	AddrTypeUnspecified             = "6"
 )
 
-func resolveNetworkAndAddrType(addr *net.UDPAddr) (string, error) {
+func resolveNetworkAndAddrType(addr *net.IPAddr) (string, error) {
 	addrType := ""
 	if addr.IP.IsGlobalUnicast() {
 		addrType = AddrTypeGlobalUnicast
@@ -105,7 +106,7 @@ func (c *connManager) GetConnForAddr(network, host string) (net.PacketConn, erro
 		return upc, nil
 	}
 
-	netAddrType, err := resolveNetworkAndAddrType(udpAddr)
+	netAddrType, err := resolveNetworkAndAddrType(&net.IPAddr{IP: udpAddr.IP, Zone: udpAddr.Zone})
 	if err != nil {
 		return nil, err
 	}
@@ -153,6 +154,47 @@ func (c *connManager) createConn(network, host string) (net.PacketConn, error) {
 	return net.ListenUDP(network, addr)
 }
 
+func (c *connManager) queryAllInterfaceAddrs() {
+	ias, err := net.InterfaceAddrs()
+	if err != nil {
+		return // no error
+	}
+
+	for _, ia := range ias {
+
+		ipAddr := &net.IPAddr{
+			IP: net.ParseIP(strings.Split(ia.String(), "/")[0]),
+		}
+		if err != nil {
+			continue // no error
+		}
+		ty, err := resolveNetworkAndAddrType(ipAddr)
+		if err != nil {
+			return // no error
+		}
+		c.interfaceAddrs[ty] = append(c.interfaceAddrs[ty], ipAddr.String())
+	}
+}
+
+func (c *connManager) getLocalInterfaceToDialOn(network, host string) string {
+	host = strings.Split(host, ":")[0]
+	ty, err := resolveNetworkAndAddrType(&net.IPAddr{IP: net.ParseIP(host)})
+	var list []string
+	if err == nil {
+		list = c.interfaceAddrs[ty]
+	}
+
+	if len(list) == 0 {
+		switch network {
+		case "udp4":
+			return "0.0.0.0"
+		case "udp6":
+			return "::"
+		}
+	}
+	return list[0]
+}
+
 // The Transport implements the tpt.Transport interface for QUIC connections.
 type transport struct {
 	privKey     ic.PrivKey
@@ -174,13 +216,18 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 		return nil, err
 	}
 
+	cm := &connManager{
+		conn:           make(map[string][]net.PacketConn),
+		interfaceAddrs: make(map[string][]string),
+	}
+
+	cm.queryAllInterfaceAddrs()
+
 	return &transport{
-		privKey:   key,
-		localPeer: localPeer,
-		tlsConf:   tlsConf,
-		connManager: &connManager{
-			conn: make(map[string][]net.PacketConn),
-		},
+		privKey:     key,
+		localPeer:   localPeer,
+		tlsConf:     tlsConf,
+		connManager: cm,
 	}, nil
 }
 
@@ -190,7 +237,9 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	pconn, err := t.connManager.GetConnForAddr(network, strings.Split(host, ":")[0]+":0")
+
+	intf := t.connManager.getLocalInterfaceToDialOn(network, host)
+	pconn, err := t.connManager.GetConnForAddr(network, intf+":")
 	if err != nil {
 		return nil, err
 	}
