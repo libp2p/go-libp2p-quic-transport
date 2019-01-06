@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	ic "github.com/libp2p/go-libp2p-crypto"
@@ -109,6 +110,7 @@ func (c *connManager) GetConnForAddr(network, host string) (net.PacketConn, erro
 		if err != nil {
 			return nil, err
 		}
+		fmt.Println("crated conn", pc.LocalAddr())
 		c.conn[netAddrType] = append(c.conn[netAddrType], pc)
 		fmt.Println("No new conn", len(c.conn[netAddrType]))
 		return pc, nil
@@ -182,10 +184,11 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	pconn, err := t.connManager.GetConnForAddr(network, "")
+	pconn, err := t.connManager.GetConnForAddr(network, strings.Split(host, ":")[0]+":0")
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("Using this conn for dial", pconn.LocalAddr())
 	addr, err := fromQuicMultiaddr(raddr)
 	if err != nil {
 		return nil, err
