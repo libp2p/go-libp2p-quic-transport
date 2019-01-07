@@ -9,6 +9,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 
 	logging "github.com/ipfs/go-log"
 	ic "github.com/libp2p/go-libp2p-crypto"
@@ -52,7 +53,8 @@ type connManager struct {
 	// maps string(Network_Type:Addr_Type) -> PacketConn
 	// Network_Type could be "udp4" or "udp6"
 	// Addr_Type could be one of the const from AddrType* depending on the type of IP address.
-	conn map[string][]net.PacketConn
+	conn      map[string][]net.PacketConn
+	connMutex *sync.Mutex
 
 	// interfaceAddrs maps string(Network_Type:Addr_Type) -> []string(IP Addresses)
 	// Its contains all the IP addresses associated with an interface
@@ -131,8 +133,9 @@ func (c *connManager) GetConnForAddr(network, host string) (net.PacketConn, erro
 		if err != nil {
 			return nil, err
 		}
-		// TODO: mutex
+		c.connMutex.Lock()
 		c.conn[netAddrType] = append(c.conn[netAddrType], pc)
+		c.connMutex.Unlock()
 		log.Debug("Creating a new packetConn with local addr:", pc.LocalAddr())
 		return pc, nil
 	}
@@ -223,6 +226,7 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 
 	cm := &connManager{
 		conn:           make(map[string][]net.PacketConn),
+		connMutex:      &sync.Mutex{},
 		interfaceAddrs: make(map[string][]string),
 	}
 
