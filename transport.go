@@ -182,7 +182,12 @@ func (c *connManager) queryAllInterfaceAddrs() {
 // This is useful if we are dialling to "192.168.0.104" [non localhost] but listening on "127.0.0.1" [localhost]
 // In this case we have to create a new "packetConn" [socket] using "192.168.0.102"
 func (c *connManager) getLocalInterfaceToDialOn(network, host string) string {
-	host = strings.Split(host, ":")[0]
+	if network == "udp6" {
+		host = strings.Split(host, "]:")[0][1:]
+	} else {
+		host = strings.Split(host, ":")[0]
+	}
+
 	ty, err := resolveNetworkAndAddrType(&net.IPAddr{IP: net.ParseIP(host)})
 	var list []string
 	if err == nil {
@@ -192,15 +197,19 @@ func (c *connManager) getLocalInterfaceToDialOn(network, host string) string {
 	// len(list) == 0 would mean an error is returned by "resolveNetworkAndAddrType"
 	// So could not determine the best interface to dial from.
 	// Return the "all interfaces" IP.
-	if len(list) == 0 {
-		switch network {
-		case "udp4":
+	switch network {
+	case "udp4":
+		if len(list) == 0 {
 			return "0.0.0.0"
-		case "udp6":
-			return "::"
 		}
+		return list[0]
+	case "udp6":
+		if len(list) == 0 {
+			return "[::]"
+		}
+		return "[" + list[0] + "]"
 	}
-	return list[0]
+	return ""
 }
 
 // The Transport implements the tpt.Transport interface for QUIC connections.
