@@ -7,9 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
-	"sync"
 
+	logging "github.com/ipfs/go-log"
 	ic "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"
 	tpt "github.com/libp2p/go-libp2p-transport"
@@ -19,8 +20,22 @@ import (
 	"github.com/whyrusleeping/mafmt"
 )
 
+var log = logging.Logger("libp2pquic")
+
+// Types of IP addresses. Used as a key to the map.
+const (
+	AddrTypeGlobalUnicast uint8 = iota
+	AddrTypeInterfaceLocalMulticast
+	AddrTypeLinkLocalMulticast
+	AddrTypeLinkLocalUnicast
+	AddrTypeLoopback
+	AddrTypeMulticast
+	AddrTypeUnspecified
+	AddrTypeInvalid
+)
+
 var quicConfig = &quic.Config{
-	Versions:                              []quic.VersionNumber{101},
+	Versions:                              []quic.VersionNumber{quic.VersionMilestone0_10_0},
 	MaxIncomingStreams:                    1000,
 	MaxIncomingUniStreams:                 -1,              // disable unidirectional streams
 	MaxReceiveStreamFlowControlWindow:     3 * (1 << 20),   // 3 MB
@@ -33,28 +48,22 @@ var quicConfig = &quic.Config{
 }
 
 type connManager struct {
-	connIPv4Once sync.Once
-	connIPv4     net.PacketConn
+	// conn keeps track of all "PacketConn" created.
+	// maps string(Network_Type:Addr_Type) -> PacketConn
+	// Network_Type could be "udp4" or "udp6"
+	// Addr_Type could be one of the const from AddrType* depending on the type of IP address.
+	conn map[string][]net.PacketConn
 
-	connIPv6Once sync.Once
-	connIPv6     net.PacketConn
-
-	conn           map[string][]net.PacketConn // string(Network_Type:Addr_Type) -> PacketConn
+	// interfaceAddrs maps string(Network_Type:Addr_Type) -> []string(IP Addresses)
+	// Its contains all the IP addresses associated with an interface
+	// Eg: 127.0.0.1/8 is stored as ["udp4:4"]->"127.0.0.1"
+	// Eg: 192.168.0.102 as			["udp4:0"]->"192.168.0.102"
+	// Used when dialing and an appropriate socket isn't available/open.
 	interfaceAddrs map[string][]string
 }
 
-const (
-	AddrTypeGlobalUnicast           = "0"
-	AddrTypeInterfaceLocalMulticast = "1"
-	AddrTypeLinkLocalMulticast      = "2"
-	AddrTypeLinkLocalUnicast        = "3"
-	AddrTypeLoopback                = "4"
-	AddrTypeMulticast               = "5"
-	AddrTypeUnspecified             = "6"
-)
-
 func resolveNetworkAndAddrType(addr *net.IPAddr) (string, error) {
-	addrType := ""
+	addrType := AddrTypeInvalid
 	if addr.IP.IsGlobalUnicast() {
 		addrType = AddrTypeGlobalUnicast
 	} else if addr.IP.IsInterfaceLocalMulticast() {
@@ -71,14 +80,14 @@ func resolveNetworkAndAddrType(addr *net.IPAddr) (string, error) {
 		addrType = AddrTypeUnspecified
 	}
 
-	if addrType == "" {
-		return "", fmt.Errorf("Invalid address type")
+	if addrType == AddrTypeInvalid {
+		return "", fmt.Errorf("could not determine IP address type (eg: loopback, unicast, multicast etc)")
 	} else {
 		// addr.Network() returns "udp" (not "udp4" or "udp6")
 		if addr.IP.To4() != nil {
-			return "udp4:" + addrType, nil
+			return "udp4:" + strconv.Itoa(int(addrType)), nil
 		} else {
-			return "udp6:" + addrType, nil
+			return "udp6:" + strconv.Itoa(int(addrType)), nil
 		}
 
 	}
@@ -87,7 +96,7 @@ func resolveNetworkAndAddrType(addr *net.IPAddr) (string, error) {
 
 // return conn which accepts connection on all interface
 func (c *connManager) connForAllInterface(network string) net.PacketConn {
-	key := network + ":" + AddrTypeUnspecified
+	key := network + ":" + strconv.Itoa(int(AddrTypeUnspecified))
 	if len(c.conn[key]) != 0 {
 		return c.conn[key][0]
 	} else {
@@ -101,6 +110,8 @@ func (c *connManager) GetConnForAddr(network, host string) (net.PacketConn, erro
 		return nil, err
 	}
 
+	// check if we already have a "packetConn" corresponding to "0.0.0.0" or "::"
+	// If yes, no need to check for any other "packetConn"
 	upc := c.connForAllInterface(network)
 	if upc != nil {
 		return upc, nil
@@ -113,37 +124,23 @@ func (c *connManager) GetConnForAddr(network, host string) (net.PacketConn, erro
 
 	availablePacketConnList := c.conn[netAddrType]
 
+	// no "packetConn" available for this type of IP address.
+	// create a new "packetConn" and store it for future use.
 	if len(availablePacketConnList) == 0 {
 		pc, err := c.createConn(network, host)
 		if err != nil {
 			return nil, err
 		}
+		// TODO: mutex
 		c.conn[netAddrType] = append(c.conn[netAddrType], pc)
-		fmt.Println("Creating new conn", pc.LocalAddr(), len(c.conn[netAddrType]), netAddrType)
+		log.Debug("Creating a new packetConn with local addr:", pc.LocalAddr())
 		return pc, nil
 	}
 
-	// This network address pair has more than one PacketConn.
+	// This network has at least one PacketConn.
 	// Return the first one.
-	fmt.Println("Returning existing conn")
+	log.Debug("Found an existing packetConn with local addr: ", availablePacketConnList[0].LocalAddr())
 	return availablePacketConnList[0], nil
-
-	/* switch network {
-	case "udp4":
-		var err error
-		c.connIPv4Once.Do(func() {
-			c.connIPv4, err = c.createConn(network, host)
-		})
-		return c.connIPv4, err
-	case "udp6":
-		var err error
-		c.connIPv6Once.Do(func() {
-			c.connIPv6, err = c.createConn(network, host)
-		})
-		return c.connIPv6, err
-	default:
-		return nil, fmt.Errorf("unsupported network: %s", network)
-	} */
 }
 
 func (c *connManager) createConn(network, host string) (net.PacketConn, error) {
@@ -157,11 +154,10 @@ func (c *connManager) createConn(network, host string) (net.PacketConn, error) {
 func (c *connManager) queryAllInterfaceAddrs() {
 	ias, err := net.InterfaceAddrs()
 	if err != nil {
-		return // no error
+		return // no error. If we could not query the interfaces we will use "0.0.0.0" or "::" while dialling.
 	}
 
 	for _, ia := range ias {
-
 		ipAddr := &net.IPAddr{
 			IP: net.ParseIP(strings.Split(ia.String(), "/")[0]),
 		}
@@ -176,6 +172,12 @@ func (c *connManager) queryAllInterfaceAddrs() {
 	}
 }
 
+// getLocalInterfaceToDialOn will return the IP address associated
+// to an interface corresponding to an IP address type.
+// Eg: If we dial to "127.0.0.2", it returns "127.0.0.1"
+// Eg: If we dial to 192.168.0.104", it returns "192.168.0.102"
+// This is useful if we are dialling to "192.168.0.104" [non localhost] but listening on "127.0.0.1" [localhost]
+// In this case we have to create a new "packetConn" [socket] using "192.168.0.102"
 func (c *connManager) getLocalInterfaceToDialOn(network, host string) string {
 	host = strings.Split(host, ":")[0]
 	ty, err := resolveNetworkAndAddrType(&net.IPAddr{IP: net.ParseIP(host)})
@@ -184,6 +186,9 @@ func (c *connManager) getLocalInterfaceToDialOn(network, host string) string {
 		list = c.interfaceAddrs[ty]
 	}
 
+	// len(list) == 0 would mean an error is returned by "resolveNetworkAndAddrType"
+	// So could not determine the best interface to dial from.
+	// Return the "all interfaces" IP.
 	if len(list) == 0 {
 		switch network {
 		case "udp4":
@@ -221,6 +226,8 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 		interfaceAddrs: make(map[string][]string),
 	}
 
+	// query and fill "interfaceAddrs" map->list with all the available interface IPs.
+	// This will be used while dialling to pick the best interface if one is not already available.
 	cm.queryAllInterfaceAddrs()
 
 	return &transport{
@@ -238,12 +245,13 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		return nil, err
 	}
 
+	// get the IP address of the interface which could dial to "raddr".
 	intf := t.connManager.getLocalInterfaceToDialOn(network, host)
+	// check if we have "packetConn" corresponding to this interface. If yes, dial using it. If not, create a new one.
 	pconn, err := t.connManager.GetConnForAddr(network, intf+":")
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Using this conn for dial", pconn.LocalAddr())
 	addr, err := fromQuicMultiaddr(raddr)
 	if err != nil {
 		return nil, err
