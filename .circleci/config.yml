@@ -7,4 +7,5 @@ jobs:
           GO111MODULE: "on"
     steps:
       - checkout
-      - run: go test -v -race -bench . ./...
+      - run: GO111MODULE=off go get github.com/onsi/ginkgo/ginkgo
+      - run: ginkgo -r -v --randomizeAllSpecs --randomizeSuites --trace --progress --race
