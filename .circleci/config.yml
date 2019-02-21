@@ -1,11 +1,11 @@
 version: 2
 jobs:
   build:
-    docker:
-      - image: circleci/golang:1.11
-        environment:
-          GO111MODULE: "on"
+    # Can't use docker because IPv6 support isn't included?
+    machine: true
     steps:
+      - run: sudo rm -r /usr/local/go
+      - run: cd /usr/local && curl https://dl.google.com/go/go1.11.5.linux-amd64.tar.gz | sudo tar -zx
       - checkout
       - run: GO111MODULE=off go get github.com/onsi/ginkgo/ginkgo
-      - run: ginkgo -r -v --randomizeAllSpecs --randomizeSuites --trace --progress --race
+      - run: GO111MODULE=on ginkgo -r -v --randomizeAllSpecs --randomizeSuites --trace --progress --race
