@@ -10,6 +10,7 @@ jobs:
           name: "Setup build environment"
           command: |
             make deps
+            sudo sh -c 'echo 0 > /proc/sys/net/ipv6/conf/all/disable_ipv6'
       - run:
           name: "Build infos"
           command: |
