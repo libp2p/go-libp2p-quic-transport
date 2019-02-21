@@ -1,0 +1,19 @@
+version: 2.1
+jobs:
+  build:
+    docker:
+      - image: circleci/golang:1.11
+    working_directory: /go/src/github.com/libp2p/go-libp2p-quic-transport
+    steps:
+      - checkout
+      - run:
+          name: "Setup build environment"
+          command: |
+            make deps
+      - run:
+          name: "Build infos"
+          command: |
+            go version
+      - run:
+          name: "Run tests"
+          command: ginkgo -r -v --randomizeAllSpecs --randomizeSuites --trace --progress --race
