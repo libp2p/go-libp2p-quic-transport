@@ -1,20 +1,29 @@
 language: go
 
 go:
-  - "1.10.x"
-  - "1.11.x"
+  - "1.12.x"
 
 # first part of the GOARCH workaround
 # setting the GOARCH directly doesn't work, since the value will be overwritten later
 # so set it to a temporary environment variable first
 env:
-  - TRAVIS_GOARCH=amd64
-  - TRAVIS_GOARCH=386
+  - TRAVIS_GOARCH=amd64 BUILDMODE=gx
+  - TRAVIS_GOARCH=386 BUILDMODE=gx
+  - TRAVIS_GOARCH=amd64 BUILDMODE=gomod
+  - TRAVIS_GOARCH=386 BUILDMODE=gomod
 
 # second part of the GOARCH workaround
 # now actually set the GOARCH env variable to the value of the temporary variable set earlier
 before_install:
-  - make deps
+  - |
+    if [ ${BUILDMODE} == "gx" ]; then
+      make deps;
+    fi
+  - |
+    if [ ${BUILDMODE} == "gomod" ]; then
+      export GO111MODULE=on;
+      make testutils;
+    fi
   - export GOARCH=$TRAVIS_GOARCH
   - go env # for debugging
 
