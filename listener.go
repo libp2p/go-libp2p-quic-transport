@@ -16,9 +16,8 @@ var quicListenAddr = quic.ListenAddr
 
 // A listener listens for QUIC connections.
 type listener struct {
-	quicListener quic.Listener
-	transport    tpt.Transport
-
+	quicListener   quic.Listener
+	transport      *transport
 	privKey        ic.PrivKey
 	localPeer      peer.ID
 	localMultiaddr ma.Multiaddr
@@ -26,7 +25,7 @@ type listener struct {
 
 var _ tpt.Listener = &listener{}
 
-func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, key ic.PrivKey, tlsConf *tls.Config) (tpt.Listener, error) {
+func newListener(addr ma.Multiaddr, t *transport, localPeer peer.ID, key ic.PrivKey, tlsConf *tls.Config) (tpt.Listener, error) {
 	lnet, host, err := manet.DialArgs(addr)
 	if err != nil {
 		return nil, err
@@ -35,7 +34,7 @@ func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, 
 	if err != nil {
 		return nil, err
 	}
-	conn, err := net.ListenUDP(lnet, laddr)
+	conn, err := t.connManagers.Listen(lnet, laddr)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +48,7 @@ func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, 
 	}
 	return &listener{
 		quicListener:   ln,
-		transport:      transport,
+		transport:      t,
 		privKey:        key,
 		localPeer:      localPeer,
 		localMultiaddr: localMultiaddr,
@@ -99,6 +98,18 @@ func (l *listener) setupConn(sess quic.Session) (tpt.Conn, error) {
 
 // Close closes the listener.
 func (l *listener) Close() error {
+	lnet, host, err := manet.DialArgs(l.localMultiaddr)
+	if err != nil {
+		return err
+	}
+	laddr, err := net.ResolveUDPAddr(lnet, host)
+	if err != nil {
+		return err
+	}
+	err = l.transport.connManagers.Close(lnet, laddr)
+	if err != nil {
+		return err
+	}
 	return l.quicListener.Close()
 }
 

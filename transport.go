@@ -5,9 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"fmt"
 	"net"
-	"sync"
 
 	ic "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"
@@ -31,47 +29,36 @@ var quicConfig = &quic.Config{
 	KeepAlive: true,
 }
 
-type connManager struct {
-	connIPv4Once sync.Once
-	connIPv4     net.PacketConn
-
-	connIPv6Once sync.Once
-	connIPv6     net.PacketConn
+type connManagers struct {
+	reuses map[string]*Reuse
 }
 
-func (c *connManager) GetConnForAddr(network string) (net.PacketConn, error) {
-	switch network {
-	case "udp4":
-		var err error
-		c.connIPv4Once.Do(func() {
-			c.connIPv4, err = c.createConn(network, "0.0.0.0:0")
-		})
-		return c.connIPv4, err
-	case "udp6":
-		var err error
-		c.connIPv6Once.Do(func() {
-			c.connIPv6, err = c.createConn(network, ":0")
-		})
-		return c.connIPv6, err
-	default:
-		return nil, fmt.Errorf("unsupported network: %s", network)
+func (c *connManagers) Listen(network string, laddr *net.UDPAddr) (net.PacketConn, error) {
+	if reuse, ok := c.reuses[network]; ok {
+		return reuse.Listen(network, laddr)
 	}
+	return nil, errors.New("invalid network: must be either udp4 or udp6")
 }
 
-func (c *connManager) createConn(network, host string) (net.PacketConn, error) {
-	addr, err := net.ResolveUDPAddr(network, host)
-	if err != nil {
-		return nil, err
+func (c *connManagers) Dial(network string, raddr *net.UDPAddr) (net.PacketConn, error) {
+	if reuse, ok := c.reuses[network]; ok {
+		return reuse.Dial(network, raddr)
 	}
-	return net.ListenUDP(network, addr)
+	return nil, errors.New("invalid network: must be either udp4 or udp6")
+}
+func (c *connManagers) Close(network string, laddr *net.UDPAddr) error {
+	if reuse, ok := c.reuses[network]; ok {
+		return reuse.Close(laddr)
+	}
+	return errors.New("invalid network: must be either udp4 or udp6")
 }
 
 // The Transport implements the tpt.Transport interface for QUIC connections.
 type transport struct {
-	privKey     ic.PrivKey
-	localPeer   peer.ID
-	tlsConf     *tls.Config
-	connManager *connManager
+	privKey      ic.PrivKey
+	localPeer    peer.ID
+	tlsConf      *tls.Config
+	connManagers *connManagers
 }
 
 var _ tpt.Transport = &transport{}
@@ -87,11 +74,18 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 		return nil, err
 	}
 
+	connManagers := &connManagers{
+		reuses: make(map[string]*Reuse),
+	}
+
+	connManagers.reuses["udp4"] = NewReuse()
+	connManagers.reuses["udp6"] = NewReuse()
+
 	return &transport{
-		privKey:     key,
-		localPeer:   localPeer,
-		tlsConf:     tlsConf,
-		connManager: &connManager{},
+		privKey:      key,
+		localPeer:    localPeer,
+		tlsConf:      tlsConf,
+		connManagers: connManagers,
 	}, nil
 }
 
@@ -101,7 +95,11 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	pconn, err := t.connManager.GetConnForAddr(network)
+	udpAddr, err := net.ResolveUDPAddr(network, host)
+	if err != nil {
+		return nil, err
+	}
+	pconn, err := t.connManagers.Dial(network, udpAddr)
 	if err != nil {
 		return nil, err
 	}
