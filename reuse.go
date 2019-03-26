@@ -48,11 +48,10 @@ func (rc *reuseConn) Close() error {
 const RuseDialRetryTime = 3
 
 type Reuse struct {
-	mutex          sync.Mutex
-	unicast        map[string]map[int]*reuseConn
-	unspecific     []*reuseConn
-	connGlobal     *reuseConn
-	connGlobalOnce sync.Once
+	mutex      sync.Mutex
+	unicast    map[string]map[int]*reuseConn
+	unspecific []*reuseConn
+	connGlobal *reuseConn
 }
 
 func NewReuse() *Reuse {
