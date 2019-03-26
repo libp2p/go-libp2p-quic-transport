@@ -58,7 +58,7 @@ type transport struct {
 	privKey      ic.PrivKey
 	localPeer    peer.ID
 	tlsConf      *tls.Config
-	ConnManagers *connManagers
+	connManagers *connManagers
 }
 
 var _ tpt.Transport = &transport{}
@@ -85,7 +85,7 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 		privKey:      key,
 		localPeer:    localPeer,
 		tlsConf:      tlsConf,
-		ConnManagers: connManagers,
+		connManagers: connManagers,
 	}, nil
 }
 
@@ -99,7 +99,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	pconn, err := t.ConnManagers.Dial(network, udpAddr)
+	pconn, err := t.connManagers.Dial(network, udpAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -173,4 +173,8 @@ func (t *transport) Protocols() []int {
 
 func (t *transport) String() string {
 	return "QUIC"
+}
+
+func (t *transport) ConnManagers() *connManagers {
+	return t.connManagers
 }

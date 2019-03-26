@@ -34,7 +34,7 @@ func newListener(addr ma.Multiaddr, t *transport, localPeer peer.ID, key ic.Priv
 	if err != nil {
 		return nil, err
 	}
-	conn, err := t.ConnManagers.Listen(lnet, laddr)
+	conn, err := t.ConnManagers().Listen(lnet, laddr)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (l *listener) Close() error {
 	if err != nil {
 		return err
 	}
-	err = l.transport.ConnManagers.Close(lnet, laddr)
+	err = l.transport.ConnManagers().Close(lnet, laddr)
 	if err != nil {
 		return err
 	}
