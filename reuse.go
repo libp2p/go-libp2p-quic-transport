@@ -8,33 +8,32 @@ import (
 	srcs "github.com/lnykww/go-src-select"
 )
 
-type ReuseConn struct {
+type reuseConn struct {
 	net.PacketConn
-	lock sync.Mutex
-	ref  int
+	mutex sync.Mutex
+	ref   int
 }
 
-func NewReuseConn(conn net.PacketConn) *ReuseConn {
-	return &ReuseConn{
+func NewReuseConn(conn net.PacketConn) *reuseConn {
+	return &reuseConn{
 		PacketConn: conn,
 		ref:        1,
-		lock:       sync.Mutex{},
 	}
 }
 
-func (rc *ReuseConn) Ref() error {
-	rc.lock.Lock()
-	defer rc.lock.Unlock()
+func (rc *reuseConn) Ref() bool {
+	rc.mutex.Lock()
+	defer rc.mutex.Unlock()
 	if rc.ref == 0 {
-		return errors.New("conn closed")
+		return false
 	}
 	rc.ref++
-	return nil
+	return true
 }
 
-func (rc *ReuseConn) Close() error {
-	rc.lock.Lock()
-	defer rc.lock.Unlock()
+func (rc *reuseConn) Close() error {
+	rc.mutex.Lock()
+	defer rc.mutex.Unlock()
 	var err error
 	switch rc.ref {
 	case 0: // cloesd, just return
@@ -47,23 +46,23 @@ func (rc *ReuseConn) Close() error {
 }
 
 type Reuse struct {
-	lock           sync.Mutex
-	unicast        map[string]map[int]net.PacketConn
-	unspecific     []net.PacketConn
-	connGlobal     net.PacketConn
+	mutex          sync.Mutex
+	unicast        map[string]map[int]*reuseConn
+	unspecific     []*reuseConn
+	connGlobal     *reuseConn
 	connGlobalOnce sync.Once
 }
 
 func NewReuse() *Reuse {
 	return &Reuse{
-		unicast:    make(map[string]map[int]net.PacketConn),
-		unspecific: make([]net.PacketConn, 0),
+		unicast:    make(map[string]map[int]*reuseConn),
+		unspecific: make([]*reuseConn, 0),
 	}
 }
 
 // getConnGlobal get the global random port socket, if not exist, create
 // it first.
-func (r *Reuse) getConnGlobal(network string) (net.PacketConn, error) {
+func (r *Reuse) getConnGlobal(network string) (*reuseConn, error) {
 	var err error
 	r.connGlobalOnce.Do(func() {
 		var addr *net.UDPAddr
@@ -92,23 +91,14 @@ func (r *Reuse) getConnGlobal(network string) (net.PacketConn, error) {
 	return r.connGlobal, err
 }
 
-// rueseConn Assertion the type of the conn is ReuseConn and inc the ref
-func (r *Reuse) reuseConn(conn net.PacketConn) error {
-	reuseConn, ok := conn.(*ReuseConn)
-	if !ok {
-		panic("type ReuseConn Assert failed: something wrong!")
-	}
-	return reuseConn.Ref()
-}
-
-func (r *Reuse) dial(network string, raddr *net.UDPAddr) (net.PacketConn, error) {
+func (r *Reuse) dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
 	// Find the source address which kernel use
 	sip, err := srcs.Select(raddr.IP)
 	if err != nil {
 		return r.getConnGlobal(network)
 	}
-	r.lock.Lock()
-	defer r.lock.Unlock()
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 
 	// If we has a listener on this address, use it to dial
 	if c, ok := r.unicast[sip.String()]; ok {
@@ -129,11 +119,11 @@ func (r *Reuse) Dial(network string, raddr *net.UDPAddr) (net.PacketConn, error)
 	if err != nil {
 		return nil, err
 	}
-	// we are reuse a conn, reference it
-	if err = r.reuseConn(conn); err != nil {
-		return nil, err
+
+	if ok := conn.Ref(); ok {
+		return conn, nil
 	}
-	return conn, nil
+	return nil, errors.New("Can not reference any connection for reuse")
 }
 
 func (r *Reuse) Listen(network string, laddr *net.UDPAddr) (net.PacketConn, error) {
@@ -142,30 +132,30 @@ func (r *Reuse) Listen(network string, laddr *net.UDPAddr) (net.PacketConn, erro
 		return nil, err
 	}
 
-	reuseConn := NewReuseConn(conn)
+	rconn := NewReuseConn(conn)
 
-	r.lock.Lock()
-	defer r.lock.Unlock()
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 
 	switch {
 	case laddr.IP.IsUnspecified():
-		r.unspecific = append(r.unspecific, reuseConn)
+		r.unspecific = append(r.unspecific, rconn)
 	default:
 		if _, ok := r.unicast[laddr.IP.String()]; !ok {
-			r.unicast[laddr.IP.String()] = make(map[int]net.PacketConn)
+			r.unicast[laddr.IP.String()] = make(map[int]*reuseConn)
 		}
 		if _, ok := r.unicast[laddr.IP.String()][laddr.Port]; ok {
 			conn.Close()
 			return nil, errors.New("addr already listen")
 		}
-		r.unicast[laddr.IP.String()][laddr.Port] = reuseConn
+		r.unicast[laddr.IP.String()][laddr.Port] = rconn
 	}
-	return reuseConn, nil
+	return rconn, nil
 }
 
 func (r *Reuse) Close(addr *net.UDPAddr) error {
-	r.lock.Lock()
-	defer r.lock.Unlock()
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 	switch {
 	case addr.IP.IsUnspecified():
 		for index, conn := range r.unspecific {
