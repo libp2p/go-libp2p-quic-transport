@@ -62,11 +62,14 @@ func NewReuse() *Reuse {
 	}
 }
 
-// getConnGlobal get the global random port socket, if not exist, create
+// dialGlobal get the global random port socket, if not exist, create
 // it first.
-func (r *Reuse) getConnGlobal(network string) (*reuseConn, error) {
+func (r *Reuse) dialGlobal(network string) (*reuseConn, error) {
 	var err error
-	r.connGlobalOnce.Do(func() {
+
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	if r.connGlobal == nil || !r.connGlobal.Ref() {
 		var addr *net.UDPAddr
 		var conn net.PacketConn
 		var host string
@@ -78,29 +81,25 @@ func (r *Reuse) getConnGlobal(network string) (*reuseConn, error) {
 		}
 		addr, err = net.ResolveUDPAddr(network, host)
 		if err != nil {
-			return
+			return nil, err
 		}
 		conn, err = net.ListenUDP(network, addr)
 		if err != nil {
-			return
+			return nil, err
 		}
-
 		r.connGlobal = NewReuseConn(conn)
-	})
-	if r.connGlobal == nil && err == nil {
-		err = errors.New("global socket init not done")
 	}
 	return r.connGlobal, err
 }
 
-func (r *Reuse) dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
+func (r *Reuse) dialBest(network string, raddr *net.UDPAddr) (*reuseConn, error) {
 	// Find the source address which kernel use
 	sip, err := srcs.Select(raddr.IP)
-	if err != nil {
-		return r.getConnGlobal(network)
-	}
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
+	if err != nil {
+		return nil, err
+	}
 
 	// If we has a listener on this address, use it to dial
 	if c, ok := r.unicast[sip.String()]; ok {
@@ -113,14 +112,18 @@ func (r *Reuse) dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
 		return r.unspecific[0], nil
 	}
 
-	return r.getConnGlobal(network)
+	return nil, errors.New("Not found the best conn")
 }
 
 func (r *Reuse) Dial(network string, raddr *net.UDPAddr) (net.PacketConn, error) {
-	for i = 0; i < RuseDialRetryTime; i++ {
-		conn, err := r.dial(network, raddr)
+	for i := 0; i < RuseDialRetryTime; i++ {
+		conn, err := r.dialBest(network, raddr)
 		if err != nil {
-			return nil, err
+			global, err := r.dialGlobal(network)
+			if err == nil {
+				return global, nil
+			}
+			continue
 		}
 
 		if ok := conn.Ref(); ok {
@@ -137,6 +140,7 @@ func (r *Reuse) Listen(network string, laddr *net.UDPAddr) (net.PacketConn, erro
 	}
 
 	rconn := NewReuseConn(conn)
+	_ = rconn.Ref()
 
 	r.mutex.Lock()
 	defer r.mutex.Unlock()

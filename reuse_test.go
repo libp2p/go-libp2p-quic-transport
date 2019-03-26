@@ -33,7 +33,7 @@ var _ = Describe("Reuse", func() {
 		Expect(err).ToNot(HaveOccurred())
 		dialConn, err := reuse.Dial(network, dest)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(dialConn.(*ReuseConn).PacketConn).To(Equal(unspecificConn.(*ReuseConn).PacketConn))
+		Expect(dialConn.(*reuseConn).PacketConn).To(Equal(unspecificConn.(*reuseConn).PacketConn))
 
 		// Add 127.0.0.1 addr, dial to dest("8.8.8.8")
 		// expect use the unspecific socket
@@ -44,14 +44,14 @@ var _ = Describe("Reuse", func() {
 
 		dialConn, err = reuse.Dial(network, dest)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(dialConn.(*ReuseConn).PacketConn).To(Equal(unspecificConn.(*ReuseConn).PacketConn))
+		Expect(dialConn.(*reuseConn).PacketConn).To(Equal(unspecificConn.(*reuseConn).PacketConn))
 
 		// dial to localhost expcet use the localHostConn
 		localhost, err := net.ResolveUDPAddr(network, strings.Join([]string{laddr, ":1006"}, ""))
 		Expect(err).ToNot(HaveOccurred())
 		localHostDialConn, err := reuse.Dial(network, localhost)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(localHostDialConn.(*ReuseConn).PacketConn).To(Equal(localHostConn.(*ReuseConn).PacketConn))
+		Expect(localHostDialConn.(*reuseConn).PacketConn).To(Equal(localHostConn.(*reuseConn).PacketConn))
 
 		// close the unspecific listener
 		reuse.Close(unspecific)
@@ -66,7 +66,7 @@ var _ = Describe("Reuse", func() {
 		// dial to localhost also use the localHostConn
 		localHostDialConn2, err := reuse.Dial(network, localhost)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(localHostDialConn2.(*ReuseConn).PacketConn).To(Equal(localHostConn.(*ReuseConn).PacketConn))
+		Expect(localHostDialConn2.(*reuseConn).PacketConn).To(Equal(localHostConn.(*reuseConn).PacketConn))
 		// close the localAddr listener
 		reuse.Close(localAddr)
 
@@ -96,7 +96,7 @@ var _ = Describe("Reuse", func() {
 		Expect(err).ToNot(HaveOccurred())
 		dialConn, err := reuse.Dial(network, dest)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(dialConn.(*ReuseConn).PacketConn).To(Equal(unspecificConn.(*ReuseConn).PacketConn))
+		Expect(dialConn.(*reuseConn).PacketConn).To(Equal(unspecificConn.(*reuseConn).PacketConn))
 
 		// Add [::1] addr, dial to dest("2001:4860:4860::8888")
 		// expect use the unspecific socket
@@ -117,7 +117,7 @@ var _ = Describe("Reuse", func() {
 		Expect(err).ToNot(HaveOccurred())
 		localHostDialConn, err := reuse.Dial(network, localhost)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(localHostDialConn.(*ReuseConn).PacketConn).To(Equal(localHostConn.(*ReuseConn).PacketConn))
+		Expect(localHostDialConn.(*reuseConn).PacketConn).To(Equal(localHostConn.(*reuseConn).PacketConn))
 
 		// close the unspecific listener
 		reuse.Close(unspecific)
@@ -125,7 +125,7 @@ var _ = Describe("Reuse", func() {
 		// dial to localhost also use the localHostConn
 		localHostDialConn2, err := reuse.Dial(network, localhost)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(localHostDialConn2.(*ReuseConn).PacketConn).To(Equal(localHostConn.(*ReuseConn).PacketConn))
+		Expect(localHostDialConn2.(*reuseConn).PacketConn).To(Equal(localHostConn.(*reuseConn).PacketConn))
 
 		// close the localAddr listener
 		reuse.Close(localAddr)
@@ -170,8 +170,8 @@ var _ = Describe("Reuse", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(string(data[:])).To(Equal(TestData))
 
-		err = reuseConn2.Ref()
-		Expect(err).ToNot(HaveOccurred())
+		ok := reuseConn2.Ref()
+		Expect(ok).To(Equal(true))
 
 		err = reuseConn2.Close()
 		Expect(err).ToNot(HaveOccurred())
