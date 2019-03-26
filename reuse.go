@@ -45,6 +45,8 @@ func (rc *reuseConn) Close() error {
 	return err
 }
 
+const RuseDialRetryTime = 3
+
 type Reuse struct {
 	mutex          sync.Mutex
 	unicast        map[string]map[int]*reuseConn
@@ -115,13 +117,15 @@ func (r *Reuse) dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
 }
 
 func (r *Reuse) Dial(network string, raddr *net.UDPAddr) (net.PacketConn, error) {
-	conn, err := r.dial(network, raddr)
-	if err != nil {
-		return nil, err
-	}
+	for i = 0; i < RuseDialRetryTime; i++ {
+		conn, err := r.dial(network, raddr)
+		if err != nil {
+			return nil, err
+		}
 
-	if ok := conn.Ref(); ok {
-		return conn, nil
+		if ok := conn.Ref(); ok {
+			return conn, nil
+		}
 	}
 	return nil, errors.New("Can not reference any connection for reuse")
 }
