@@ -2,6 +2,7 @@ package libp2pquic
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 
@@ -21,14 +22,18 @@ func NewReuseConn(conn net.PacketConn) *reuseConn {
 	}
 }
 
+func (rc *reuseConn) canRef() bool {
+	return rc.ref > 0
+}
+
 func (rc *reuseConn) Ref() bool {
 	rc.mutex.Lock()
 	defer rc.mutex.Unlock()
-	if rc.ref == 0 {
-		return false
+	if rc.canRef() {
+		rc.ref++
+		return true
 	}
-	rc.ref++
-	return true
+	return false
 }
 
 func (rc *reuseConn) Close() error {
@@ -48,29 +53,27 @@ func (rc *reuseConn) Close() error {
 const RuseDialRetryTime = 3
 
 type Reuse struct {
-	mutex      sync.Mutex
-	unicast    map[string]map[int]*reuseConn
-	unspecific []*reuseConn
+	mutex sync.Mutex
+	//unicast: the key is ip address and port number.
+	unicast map[string]map[int]*reuseConn
+	//unspecific: the key is port number.
+	unspecific map[int]*reuseConn
 	connGlobal *reuseConn
 }
 
 func NewReuse() *Reuse {
 	return &Reuse{
 		unicast:    make(map[string]map[int]*reuseConn),
-		unspecific: make([]*reuseConn, 0),
+		unspecific: make(map[int]*reuseConn),
 	}
 }
 
 // dialGlobal get the global random port socket, if not exist, create
 // it first.
 func (r *Reuse) dialGlobal(network string) (*reuseConn, error) {
-	var err error
-
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	if r.connGlobal == nil || !r.connGlobal.Ref() {
-		var addr *net.UDPAddr
-		var conn net.PacketConn
 		var host string
 		switch network {
 		case "udp4":
@@ -78,17 +81,17 @@ func (r *Reuse) dialGlobal(network string) (*reuseConn, error) {
 		case "udp6":
 			host = "[::]:0"
 		}
-		addr, err = net.ResolveUDPAddr(network, host)
+		addr, err := net.ResolveUDPAddr(network, host)
 		if err != nil {
 			return nil, err
 		}
-		conn, err = net.ListenUDP(network, addr)
+		conn, err := net.ListenUDP(network, addr)
 		if err != nil {
 			return nil, err
 		}
 		r.connGlobal = NewReuseConn(conn)
 	}
-	return r.connGlobal, err
+	return r.connGlobal, nil
 }
 
 func (r *Reuse) dialBest(network string, raddr *net.UDPAddr) (*reuseConn, error) {
@@ -108,7 +111,10 @@ func (r *Reuse) dialBest(network string, raddr *net.UDPAddr) (*reuseConn, error)
 	}
 
 	if len(r.unspecific) != 0 {
-		return r.unspecific[0], nil
+		// return the first value of the unspecific map
+		for _, conn := range r.unspecific {
+			return conn, nil
+		}
 	}
 
 	return nil, errors.New("Not found the best conn")
@@ -118,6 +124,8 @@ func (r *Reuse) Dial(network string, raddr *net.UDPAddr) (net.PacketConn, error)
 	for i := 0; i < RuseDialRetryTime; i++ {
 		conn, err := r.dialBest(network, raddr)
 		if err != nil {
+			// If there is no best connection which we have created. Use the global
+			// connection as default.
 			global, err := r.dialGlobal(network)
 			if err == nil {
 				return global, nil
@@ -137,51 +145,59 @@ func (r *Reuse) Listen(network string, laddr *net.UDPAddr) (net.PacketConn, erro
 	if err != nil {
 		return nil, err
 	}
-
 	rconn := NewReuseConn(conn)
-	_ = rconn.Ref()
+	// Use the addr store in connection  to handling the situation of listening on port 0
+	realAddr := rconn.LocalAddr().(*net.UDPAddr)
 
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	switch {
-	case laddr.IP.IsUnspecified():
-		r.unspecific = append(r.unspecific, rconn)
-	default:
-		if _, ok := r.unicast[laddr.IP.String()]; !ok {
-			r.unicast[laddr.IP.String()] = make(map[int]*reuseConn)
-		}
-		if _, ok := r.unicast[laddr.IP.String()][laddr.Port]; ok {
-			conn.Close()
-			return nil, errors.New("addr already listen")
-		}
-		r.unicast[laddr.IP.String()][laddr.Port] = rconn
+	// Deal with listen on a unspecific address
+	if laddr.IP.IsUnspecified() {
+		// The kernel already checked that the laddr is not already listen
+		// so we need not check here (when we create ListenUDP).
+		r.unspecific[realAddr.Port] = rconn
+		return rconn, err
 	}
-	return rconn, nil
+
+	// Deal with listen on a unicast address
+	if _, ok := r.unicast[laddr.IP.String()]; !ok {
+		r.unicast[laddr.IP.String()] = make(map[int]*reuseConn)
+	}
+
+	// The kernel already checked that the laddr is not already listen
+	// so we need not check here (when we create ListenUDP).
+	r.unicast[laddr.IP.String()][realAddr.Port] = rconn
+	return rconn, err
 }
 
 func (r *Reuse) Close(addr *net.UDPAddr) error {
+	var addrNotFound = fmt.Errorf("can't find a connection with specific addr: %s", addr.String())
+
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	switch {
-	case addr.IP.IsUnspecified():
-		for index, conn := range r.unspecific {
-			recAddr := conn.LocalAddr().(*net.UDPAddr)
-			if recAddr.IP.Equal(addr.IP) && recAddr.Port == addr.Port {
-				r.unspecific = append(r.unspecific[:index], r.unspecific[index+1:]...)
-				return nil
-			}
+	// deal with listen on a unspecific address
+	if addr.IP.IsUnspecified() {
+		if _, ok := r.unspecific[addr.Port]; ok {
+			delete(r.unspecific, addr.Port)
+			return nil
 		}
-	default:
-		if us, ok := r.unicast[addr.IP.String()]; ok {
-			if _, ok := us[addr.Port]; ok {
-				delete(us, addr.Port)
-			}
-
-			if len(us) == 0 {
-				delete(r.unicast, addr.IP.String())
-			}
-		}
+		return addrNotFound
 	}
-	return nil
+
+	// deal with listen on a unicast address
+	if us, ok := r.unicast[addr.IP.String()]; ok {
+		if _, ok := us[addr.Port]; ok {
+			delete(us, addr.Port)
+		} else {
+			return addrNotFound
+		}
+
+		if len(us) == 0 {
+			delete(r.unicast, addr.IP.String())
+		}
+
+		return nil
+	}
+	return addrNotFound
 }
