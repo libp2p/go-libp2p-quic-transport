@@ -7,23 +7,16 @@ go:
 # setting the GOARCH directly doesn't work, since the value will be overwritten later
 # so set it to a temporary environment variable first
 env:
-  - TRAVIS_GOARCH=amd64 BUILDMODE=gx
-  - TRAVIS_GOARCH=386 BUILDMODE=gx
-  - TRAVIS_GOARCH=amd64 BUILDMODE=gomod
-  - TRAVIS_GOARCH=386 BUILDMODE=gomod
+  - TRAVIS_GOARCH=amd64
+  - TRAVIS_GOARCH=386
 
 # second part of the GOARCH workaround
 # now actually set the GOARCH env variable to the value of the temporary variable set earlier
 before_install:
-  - |
-    if [ ${BUILDMODE} == "gx" ]; then
-      make deps;
-    fi
-  - |
-    if [ ${BUILDMODE} == "gomod" ]; then
-      export GO111MODULE=on;
-      make testutils;
-    fi
+  - export GO111MODULE=on
+  - go get golang.org/x/tools/cmd/cover
+  - go get github.com/onsi/ginkgo/ginkgo
+  - go get github.com/onsi/gomega
   - export GOARCH=$TRAVIS_GOARCH
   - go env # for debugging
 
