@@ -137,7 +137,7 @@ var _ = Describe("Connection", func() {
 		// dial, but expect the wrong peer ID
 		_, err = clientTransport.Dial(context.Background(), serverAddr, thirdPartyID)
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("TLS handshake error: bad certificate"))
+		Expect(err.Error()).To(ContainSubstring("CRYPTO_ERROR"))
 		Consistently(serverConnChan).ShouldNot(Receive())
 	})
 
@@ -165,7 +165,7 @@ var _ = Describe("Connection", func() {
 		Expect(err).ToNot(HaveOccurred())
 		_, err = clientTransport.Dial(context.Background(), serverAddr, serverID)
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("TLS handshake error: bad certificate"))
+		Expect(err.Error()).To(ContainSubstring("CRYPTO_ERROR"))
 		Consistently(serverConnChan).ShouldNot(Receive())
 	})
 

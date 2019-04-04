@@ -12,8 +12,7 @@ type stream struct {
 var _ smux.Stream = &stream{}
 
 func (s *stream) Reset() error {
-	if err := s.Stream.CancelRead(0); err != nil {
-		return err
-	}
-	return s.Stream.CancelWrite(0)
+	s.Stream.CancelRead(0)
+	s.Stream.CancelWrite(0)
+	return nil
 }
