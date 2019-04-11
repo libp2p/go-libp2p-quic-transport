@@ -13,3 +13,7 @@ This is an implementation of the [libp2p transport](https://github.com/libp2p/go
 ## Known limitations
 
 * currently only works with RSA host keys
+
+---
+
+The last gx published version of this module was: 
