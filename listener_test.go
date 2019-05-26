@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"net"
 
-	ic "github.com/libp2p/go-libp2p-crypto"
-	tpt "github.com/libp2p/go-libp2p-transport"
+	ic "github.com/libp2p/go-libp2p-core/crypto"
+	tpt "github.com/libp2p/go-libp2p-core/transport"
+
 	ma "github.com/multiformats/go-multiaddr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

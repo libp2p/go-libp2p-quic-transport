@@ -10,9 +10,9 @@ import (
 	"io/ioutil"
 	"time"
 
-	ic "github.com/libp2p/go-libp2p-crypto"
-	peer "github.com/libp2p/go-libp2p-peer"
-	tpt "github.com/libp2p/go-libp2p-transport"
+	ic "github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/peer"
+	tpt "github.com/libp2p/go-libp2p-core/transport"
 	ma "github.com/multiformats/go-multiaddr"
 
 	. "github.com/onsi/ginkgo"
@@ -35,9 +35,9 @@ var _ = Describe("Connection", func() {
 		return id, priv
 	}
 
-	runServer := func(tr tpt.Transport, multiaddr string) (ma.Multiaddr, <-chan tpt.Conn) {
+	runServer := func(tr tpt.Transport, multiaddr string) (ma.Multiaddr, <-chan tpt.CapableConn) {
 		addrChan := make(chan ma.Multiaddr)
-		connChan := make(chan tpt.Conn)
+		connChan := make(chan tpt.CapableConn)
 		go func() {
 			defer GinkgoRecover()
 			addr, err := ma.NewMultiaddr(multiaddr)
@@ -204,8 +204,8 @@ var _ = Describe("Connection", func() {
 		// wait for both servers to accept a connection
 		// then send some data
 		go func() {
-			for _, c := range []tpt.Conn{<-serverConnChan, <-serverConnChan2} {
-				go func(conn tpt.Conn) {
+			for _, c := range []tpt.CapableConn{<-serverConnChan, <-serverConnChan2} {
+				go func(conn tpt.CapableConn) {
 					defer GinkgoRecover()
 					str, err := conn.OpenStream()
 					Expect(err).ToNot(HaveOccurred())
@@ -225,8 +225,8 @@ var _ = Describe("Connection", func() {
 
 		done := make(chan struct{}, 2)
 		// receive the data on both connections at the same time
-		for _, c := range []tpt.Conn{c1, c2} {
-			go func(conn tpt.Conn) {
+		for _, c := range []tpt.CapableConn{c1, c2} {
+			go func(conn tpt.CapableConn) {
 				defer GinkgoRecover()
 				str, err := conn.AcceptStream()
 				Expect(err).ToNot(HaveOccurred())
