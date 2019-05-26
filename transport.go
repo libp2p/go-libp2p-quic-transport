@@ -9,9 +9,10 @@ import (
 	"net"
 	"sync"
 
-	ic "github.com/libp2p/go-libp2p-crypto"
-	peer "github.com/libp2p/go-libp2p-peer"
-	tpt "github.com/libp2p/go-libp2p-transport"
+	ic "github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/peer"
+	tpt "github.com/libp2p/go-libp2p-core/transport"
+
 	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
@@ -99,7 +100,7 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 }
 
 // Dial dials a new QUIC connection
-func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tpt.Conn, error) {
+func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tpt.CapableConn, error) {
 	network, host, err := manet.DialArgs(raddr)
 	if err != nil {
 		return nil, err

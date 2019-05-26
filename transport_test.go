@@ -1,7 +1,7 @@
 package libp2pquic
 
 import (
-	tpt "github.com/libp2p/go-libp2p-transport"
+	tpt "github.com/libp2p/go-libp2p-core/transport"
 	ma "github.com/multiformats/go-multiaddr"
 
 	. "github.com/onsi/ginkgo"
