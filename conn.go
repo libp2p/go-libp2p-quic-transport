@@ -1,6 +1,8 @@
 package libp2pquic
 
 import (
+	"context"
+
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/mux"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -36,13 +38,13 @@ func (c *conn) IsClosed() bool {
 
 // OpenStream creates a new stream.
 func (c *conn) OpenStream() (mux.MuxedStream, error) {
-	qstr, err := c.sess.OpenStreamSync()
+	qstr, err := c.sess.OpenStreamSync(context.Background())
 	return &stream{Stream: qstr}, err
 }
 
 // AcceptStream accepts a stream opened by the other side.
 func (c *conn) AcceptStream() (mux.MuxedStream, error) {
-	qstr, err := c.sess.AcceptStream()
+	qstr, err := c.sess.AcceptStream(context.Background())
 	return &stream{Stream: qstr}, err
 }
 

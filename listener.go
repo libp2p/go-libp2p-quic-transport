@@ -1,6 +1,7 @@
 package libp2pquic
 
 import (
+	"context"
 	"crypto/tls"
 	"net"
 
@@ -60,13 +61,13 @@ func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, 
 // Accept accepts new connections.
 func (l *listener) Accept() (tpt.CapableConn, error) {
 	for {
-		sess, err := l.quicListener.Accept()
+		sess, err := l.quicListener.Accept(context.Background())
 		if err != nil {
 			return nil, err
 		}
 		conn, err := l.setupConn(sess)
 		if err != nil {
-			sess.CloseWithError(0, err)
+			sess.CloseWithError(0, err.Error())
 			continue
 		}
 		return conn, nil
