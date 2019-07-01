@@ -1,14 +1,19 @@
 package libp2pquic
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"math/big"
 	"time"
+
+	"golang.org/x/crypto/ed25519"
 
 	"github.com/gogo/protobuf/proto"
 	ic "github.com/libp2p/go-libp2p-core/crypto"
@@ -67,11 +72,19 @@ func getRemotePubKey(chain []*x509.Certificate) (ic.PubKey, error) {
 	if _, err := chain[0].Verify(x509.VerifyOptions{Roots: pool}); err != nil {
 		return nil, err
 	}
-	remotePubKey, err := x509.MarshalPKIXPublicKey(chain[1].PublicKey)
-	if err != nil {
-		return nil, err
+
+	switch remotePubKey := chain[1].PublicKey.(type) {
+	case *rsa.PublicKey:
+		remotePubKeyPKIX, err := x509.MarshalPKIXPublicKey(remotePubKey)
+		if err != nil {
+			return nil, err
+		}
+		return ic.UnmarshalRsaPublicKey(remotePubKeyPKIX)
+	case ed25519.PublicKey:
+		return ic.UnmarshalEd25519PublicKey(remotePubKey)
+	default:
+		return nil, fmt.Errorf("unknown key type: %T", remotePubKey)
 	}
-	return ic.UnmarshalRsaPublicKey(remotePubKey)
 }
 
 func keyToCertificate(sk ic.PrivKey) (interface{}, *x509.Certificate, error) {
@@ -87,7 +100,8 @@ func keyToCertificate(sk ic.PrivKey) (interface{}, *x509.Certificate, error) {
 		BasicConstraintsValid: true,
 	}
 
-	var publicKey, privateKey interface{}
+	var publicKey interface{}
+	var privateKey crypto.Signer
 	keyBytes, err := sk.Bytes()
 	if err != nil {
 		return nil, nil, err
@@ -104,6 +118,9 @@ func keyToCertificate(sk ic.PrivKey) (interface{}, *x509.Certificate, error) {
 		}
 		publicKey = &k.PublicKey
 		privateKey = k
+	case pb.KeyType_Ed25519:
+		privateKey = ed25519.PrivateKey(pbmes.GetData())
+		publicKey = privateKey.Public()
 	// TODO: add support for ECDSA
 	default:
 		return nil, nil, errors.New("unsupported key type for TLS")
