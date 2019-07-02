@@ -242,4 +242,26 @@ var _ = Describe("Connection", func() {
 		Eventually(done, 5*time.Second).Should(Receive())
 		Eventually(done, 5*time.Second).Should(Receive())
 	})
+
+	It("dials to ed25519 server", func() {
+		// Generate ED25519 credentials
+		serverKey2, _, err := ic.GenerateEd25519Key(rand.Reader)
+		Expect(err).ToNot(HaveOccurred())
+		serverID2, err := peer.IDFromPrivateKey(serverKey2)
+		Expect(err).ToNot(HaveOccurred())
+
+		// Create ED25519 server
+		serverTransport2, err := NewTransport(serverKey2)
+		Expect(err).ToNot(HaveOccurred())
+		serverAddr2, _ := runServer(serverTransport2, "/ip4/127.0.0.1/udp/0/quic")
+
+		// Dial to ED25519 server
+		clientTransport, err := NewTransport(clientKey)
+		Expect(err).ToNot(HaveOccurred())
+		conn, err := clientTransport.Dial(context.Background(), serverAddr2, serverID2)
+		Expect(err).ToNot(HaveOccurred())
+
+		// Verify the ID of the ED25519 server
+		Expect(conn.RemotePeer()).To(Equal(serverID2))
+	})
 })

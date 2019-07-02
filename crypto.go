@@ -3,6 +3,7 @@ package libp2pquic
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -12,8 +13,6 @@ import (
 	"fmt"
 	"math/big"
 	"time"
-
-	"golang.org/x/crypto/ed25519"
 
 	"github.com/gogo/protobuf/proto"
 	ic "github.com/libp2p/go-libp2p-core/crypto"

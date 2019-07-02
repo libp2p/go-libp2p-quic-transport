@@ -10,3 +10,5 @@ require (
 	github.com/onsi/gomega v1.4.3
 	github.com/whyrusleeping/mafmt v1.2.8
 )
+
+go 1.13
