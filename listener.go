@@ -44,7 +44,7 @@ func newListener(addr ma.Multiaddr, transport tpt.Transport, localPeer peer.ID, 
 	if err != nil {
 		return nil, err
 	}
-	localMultiaddr, err := toQuicMultiaddr(ln.Addr())
+	localMultiaddr, err := toQuicMultiaddrLocal(ln.Addr())
 	if err != nil {
 		return nil, err
 	}
