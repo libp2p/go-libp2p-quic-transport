@@ -30,6 +30,7 @@ var _ = Describe("Listener", func() {
 	Context("listening on the right address", func() {
 		It("returns the address it is listening on", func() {
 			localAddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
+			Expect(err).ToNot(HaveOccurred())
 			ln, err := t.Listen(localAddr)
 			Expect(err).ToNot(HaveOccurred())
 			netAddr := ln.Addr()
