@@ -2,6 +2,7 @@ package libp2pquic
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -126,6 +127,9 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	select {
 	case remotePubKey = <-keyCh:
 	default:
+	}
+	if remotePubKey == nil {
+		return nil, errors.New("go-libp2p-quic-transport BUG: expected remote pub key to be set")
 	}
 
 	return &conn{
