@@ -24,7 +24,7 @@ var quicConfig = &quic.Config{
 	MaxIncomingUniStreams:                 -1,              // disable unidirectional streams
 	MaxReceiveStreamFlowControlWindow:     3 * (1 << 20),   // 3 MB
 	MaxReceiveConnectionFlowControlWindow: 4.5 * (1 << 20), // 4.5 MB
-	AcceptCookie: func(clientAddr net.Addr, cookie *quic.Cookie) bool {
+	AcceptToken: func(clientAddr net.Addr, _ *quic.Token) bool {
 		// TODO(#6): require source address validation when under load
 		return true
 	},
