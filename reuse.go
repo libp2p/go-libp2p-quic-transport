@@ -24,23 +24,37 @@ func (c *reuseConn) GetCount() int  { return int(atomic.LoadInt32(&c.refCount)) 
 type reuse struct {
 	mutex sync.Mutex
 
+	handle *netlink.Handle // Only set on Linux. nil on other systems.
+
 	unicast map[string] /* IP.String() */ map[int] /* port */ *reuseConn
 	// global contains connections that are listening on 0.0.0.0 / ::
 	global map[int]*reuseConn
 }
 
-func newReuse() *reuse {
+func newReuse() (*reuse, error) {
+	// On non-Linux systems, this will return ErrNotImplemented.
+	handle, err := netlink.NewHandle()
+	if err == netlink.ErrNotImplemented {
+		handle = nil
+	} else if err != nil {
+		return nil, err
+	}
 	return &reuse{
 		unicast: make(map[string]map[int]*reuseConn),
 		global:  make(map[int]*reuseConn),
-	}
+		handle:  handle,
+	}, nil
 }
 
+// Get the source IP that the kernel would use for dialing.
+// This only works on Linux.
+// On other systems, this returns an empty slice of IP addresses.
 func (r *reuse) getSourceIPs(network string, raddr *net.UDPAddr) ([]net.IP, error) {
-	// Determine the source address that the kernel would use for this IP address.
-	// Note: This only works on Linux.
-	// On other OSes, this will return a netlink.ErrNotImplemetned.
-	routes, err := (&netlink.Handle{}).RouteGet(raddr.IP)
+	if r.handle == nil {
+		return nil, nil
+	}
+
+	routes, err := r.handle.RouteGet(raddr.IP)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +68,7 @@ func (r *reuse) getSourceIPs(network string, raddr *net.UDPAddr) ([]net.IP, erro
 
 func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
 	ips, err := r.getSourceIPs(network, raddr)
-	if err != nil && err != netlink.ErrNotImplemented {
+	if err != nil {
 		return nil, err
 	}
 

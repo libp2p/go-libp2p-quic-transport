@@ -12,7 +12,9 @@ var _ = Describe("Reuse", func() {
 	var reuse *reuse
 
 	BeforeEach(func() {
-		reuse = newReuse()
+		var err error
+		reuse, err = newReuse()
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("creates a new global connection when listening on 0.0.0.0", func() {

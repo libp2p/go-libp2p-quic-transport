@@ -33,11 +33,19 @@ type connManager struct {
 	reuseUDP6 *reuse
 }
 
-func newConnManager() *connManager {
-	return &connManager{
-		reuseUDP4: newReuse(),
-		reuseUDP6: newReuse(),
+func newConnManager() (*connManager, error) {
+	reuseUDP4, err := newReuse()
+	if err != nil {
+		return nil, err
 	}
+	reuseUDP6, err := newReuse()
+	if err != nil {
+		return nil, err
+	}
+	return &connManager{
+		reuseUDP4: reuseUDP4,
+		reuseUDP6: reuseUDP6,
+	}, nil
 }
 
 func (c *connManager) getReuse(network string) (*reuse, error) {
@@ -87,12 +95,16 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 	if err != nil {
 		return nil, err
 	}
+	connManager, err := newConnManager()
+	if err != nil {
+		return nil, err
+	}
 
 	return &transport{
 		privKey:     key,
 		localPeer:   localPeer,
 		identity:    identity,
-		connManager: newConnManager(),
+		connManager: connManager,
 	}, nil
 }
 
