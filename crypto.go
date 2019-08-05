@@ -18,6 +18,8 @@ import (
 // mint certificate selection is broken.
 const hostname = "quic.ipfs"
 
+const alpn string = "libp2p"
+
 const certValidityPeriod = 180 * 24 * time.Hour
 
 func generateConfig(privKey ic.PrivKey) (*tls.Config, error) {
@@ -55,6 +57,7 @@ func generateConfig(privKey ic.PrivKey) (*tls.Config, error) {
 			Certificate: [][]byte{cert.Raw, hostCert.Raw},
 			PrivateKey:  ephemeralKey,
 		}},
+		NextProtos: []string{alpn},
 	}, nil
 }
 
