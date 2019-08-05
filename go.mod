@@ -1,8 +1,8 @@
 module github.com/libp2p/go-libp2p-quic-transport
 
 require (
-	github.com/gogo/protobuf v1.2.1
 	github.com/libp2p/go-libp2p-core v0.0.1
+	github.com/libp2p/go-libp2p-tls v0.1.1
 	github.com/lucas-clemente/quic-go v0.12.0
 	github.com/multiformats/go-multiaddr v0.0.4
 	github.com/multiformats/go-multiaddr-net v0.0.1

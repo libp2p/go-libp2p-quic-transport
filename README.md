@@ -10,10 +10,6 @@
 
 This is an implementation of the [libp2p transport](https://github.com/libp2p/go-libp2p-transport/blob/master/transport.go) and the [libp2p stream muxer](https://github.com/libp2p/go-stream-muxer) using QUIC.
 
-## Known limitations
-
-* currently only works with RSA host keys
-
 ---
 
 The last gx published version of this module was: 
