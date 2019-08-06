@@ -3,9 +3,7 @@ package libp2pquic
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
-	"sync"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -31,42 +29,50 @@ var quicConfig = &quic.Config{
 }
 
 type connManager struct {
-	mutex sync.Mutex
-
-	connIPv4 net.PacketConn
-	connIPv6 net.PacketConn
+	reuseUDP4 *reuse
+	reuseUDP6 *reuse
 }
 
-func (c *connManager) GetConnForAddr(network string) (net.PacketConn, error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	switch network {
-	case "udp4":
-		if c.connIPv4 != nil {
-			return c.connIPv4, nil
-		}
-		var err error
-		c.connIPv4, err = c.createConn(network, "0.0.0.0:0")
-		return c.connIPv4, err
-	case "udp6":
-		if c.connIPv6 != nil {
-			return c.connIPv6, nil
-		}
-		var err error
-		c.connIPv6, err = c.createConn(network, ":0")
-		return c.connIPv6, err
-	default:
-		return nil, fmt.Errorf("unsupported network: %s", network)
-	}
-}
-
-func (c *connManager) createConn(network, host string) (net.PacketConn, error) {
-	addr, err := net.ResolveUDPAddr(network, host)
+func newConnManager() (*connManager, error) {
+	reuseUDP4, err := newReuse()
 	if err != nil {
 		return nil, err
 	}
-	return net.ListenUDP(network, addr)
+	reuseUDP6, err := newReuse()
+	if err != nil {
+		return nil, err
+	}
+	return &connManager{
+		reuseUDP4: reuseUDP4,
+		reuseUDP6: reuseUDP6,
+	}, nil
+}
+
+func (c *connManager) getReuse(network string) (*reuse, error) {
+	switch network {
+	case "udp4":
+		return c.reuseUDP4, nil
+	case "udp6":
+		return c.reuseUDP6, nil
+	default:
+		return nil, errors.New("invalid network: must be either udp4 or udp6")
+	}
+}
+
+func (c *connManager) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
+	reuse, err := c.getReuse(network)
+	if err != nil {
+		return nil, err
+	}
+	return reuse.Listen(network, laddr)
+}
+
+func (c *connManager) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
+	reuse, err := c.getReuse(network)
+	if err != nil {
+		return nil, err
+	}
+	return reuse.Dial(network, raddr)
 }
 
 // The Transport implements the tpt.Transport interface for QUIC connections.
@@ -89,12 +95,16 @@ func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
 	if err != nil {
 		return nil, err
 	}
+	connManager, err := newConnManager()
+	if err != nil {
+		return nil, err
+	}
 
 	return &transport{
 		privKey:     key,
 		localPeer:   localPeer,
 		identity:    identity,
-		connManager: &connManager{},
+		connManager: connManager,
 	}, nil
 }
 
@@ -104,7 +114,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	pconn, err := t.connManager.GetConnForAddr(network)
+	udpAddr, err := net.ResolveUDPAddr(network, host)
 	if err != nil {
 		return nil, err
 	}
@@ -113,15 +123,15 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		return nil, err
 	}
 	tlsConf, keyCh := t.identity.ConfigForPeer(p)
+	pconn, err := t.connManager.Dial(network, udpAddr)
+	if err != nil {
+		return nil, err
+	}
 	sess, err := quic.DialContext(ctx, pconn, addr, host, tlsConf, quicConfig)
 	if err != nil {
+		pconn.DecreaseCount()
 		return nil, err
 	}
-	localMultiaddr, err := toQuicMultiaddr(sess.LocalAddr())
-	if err != nil {
-		return nil, err
-	}
-
 	// Should be ready by this point, don't block.
 	var remotePubKey ic.PubKey
 	select {
@@ -129,9 +139,19 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	default:
 	}
 	if remotePubKey == nil {
+		pconn.DecreaseCount()
 		return nil, errors.New("go-libp2p-quic-transport BUG: expected remote pub key to be set")
 	}
+	go func() {
+		<-sess.Context().Done()
+		pconn.DecreaseCount()
+	}()
 
+	localMultiaddr, err := toQuicMultiaddr(pconn.LocalAddr())
+	if err != nil {
+		pconn.DecreaseCount()
+		return nil, err
+	}
 	return &conn{
 		sess:            sess,
 		transport:       t,
@@ -151,7 +171,19 @@ func (t *transport) CanDial(addr ma.Multiaddr) bool {
 
 // Listen listens for new QUIC connections on the passed multiaddr.
 func (t *transport) Listen(addr ma.Multiaddr) (tpt.Listener, error) {
-	return newListener(addr, t, t.localPeer, t.privKey, t.identity)
+	lnet, host, err := manet.DialArgs(addr)
+	if err != nil {
+		return nil, err
+	}
+	laddr, err := net.ResolveUDPAddr(lnet, host)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := t.connManager.Listen(lnet, laddr)
+	if err != nil {
+		return nil, err
+	}
+	return newListener(conn, t, t.localPeer, t.privKey, t.identity)
 }
 
 // Proxy returns true if this transport proxies.
