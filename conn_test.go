@@ -48,21 +48,12 @@ var _ = Describe("Connection", func() {
 		return id, priv
 	}
 
-	runServer := func(tr tpt.Transport, multiaddr string) (ma.Multiaddr, <-chan tpt.CapableConn) {
-		addrChan := make(chan ma.Multiaddr)
-		connChan := make(chan tpt.CapableConn)
-		go func() {
-			defer GinkgoRecover()
-			addr, err := ma.NewMultiaddr(multiaddr)
-			Expect(err).ToNot(HaveOccurred())
-			ln, err := tr.Listen(addr)
-			Expect(err).ToNot(HaveOccurred())
-			addrChan <- ln.Multiaddr()
-			conn, err := ln.Accept()
-			Expect(err).ToNot(HaveOccurred())
-			connChan <- conn
-		}()
-		return <-addrChan, connChan
+	runServer := func(tr tpt.Transport, multiaddr string) tpt.Listener {
+		addr, err := ma.NewMultiaddr(multiaddr)
+		Expect(err).ToNot(HaveOccurred())
+		ln, err := tr.Listen(addr)
+		Expect(err).ToNot(HaveOccurred())
+		return ln
 	}
 
 	BeforeEach(func() {
@@ -73,13 +64,17 @@ var _ = Describe("Connection", func() {
 	It("handshakes on IPv4", func() {
 		serverTransport, err := NewTransport(serverKey)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
+		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
+		defer ln.Close()
 
 		clientTransport, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
-		conn, err := clientTransport.Dial(context.Background(), serverAddr, serverID)
+		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
-		serverConn := <-serverConnChan
+		defer conn.Close()
+		serverConn, err := ln.Accept()
+		Expect(err).ToNot(HaveOccurred())
+		defer serverConn.Close()
 		Expect(conn.LocalPeer()).To(Equal(clientID))
 		Expect(conn.LocalPrivateKey()).To(Equal(clientKey))
 		Expect(conn.RemotePeer()).To(Equal(serverID))
@@ -93,13 +88,17 @@ var _ = Describe("Connection", func() {
 	It("handshakes on IPv6", func() {
 		serverTransport, err := NewTransport(serverKey)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport, "/ip6/::1/udp/0/quic")
+		ln := runServer(serverTransport, "/ip6/::1/udp/0/quic")
+		defer ln.Close()
 
 		clientTransport, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
-		conn, err := clientTransport.Dial(context.Background(), serverAddr, serverID)
+		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
-		serverConn := <-serverConnChan
+		defer conn.Close()
+		serverConn, err := ln.Accept()
+		Expect(err).ToNot(HaveOccurred())
+		defer serverConn.Close()
 		Expect(conn.LocalPeer()).To(Equal(clientID))
 		Expect(conn.LocalPrivateKey()).To(Equal(clientKey))
 		Expect(conn.RemotePeer()).To(Equal(serverID))
@@ -113,13 +112,17 @@ var _ = Describe("Connection", func() {
 	It("opens and accepts streams", func() {
 		serverTransport, err := NewTransport(serverKey)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
+		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
+		defer ln.Close()
 
 		clientTransport, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
-		conn, err := clientTransport.Dial(context.Background(), serverAddr, serverID)
+		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
-		serverConn := <-serverConnChan
+		defer conn.Close()
+		serverConn, err := ln.Accept()
+		Expect(err).ToNot(HaveOccurred())
+		defer serverConn.Close()
 
 		str, err := conn.OpenStream()
 		Expect(err).ToNot(HaveOccurred())
@@ -138,15 +141,24 @@ var _ = Describe("Connection", func() {
 
 		serverTransport, err := NewTransport(serverKey)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
+		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
 		clientTransport, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
 		// dial, but expect the wrong peer ID
-		_, err = clientTransport.Dial(context.Background(), serverAddr, thirdPartyID)
+		_, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), thirdPartyID)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("CRYPTO_ERROR"))
-		Consistently(serverConnChan).ShouldNot(Receive())
+
+		done := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			defer close(done)
+			ln.Accept()
+		}()
+		Consistently(done).ShouldNot(BeClosed())
+		ln.Close()
+		Eventually(done).Should(BeClosed())
 	})
 
 	It("dials to two servers at the same time", func() {
@@ -154,16 +166,23 @@ var _ = Describe("Connection", func() {
 
 		serverTransport, err := NewTransport(serverKey)
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr, serverConnChan := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
+		ln1 := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		serverTransport2, err := NewTransport(serverKey2)
+		defer ln1.Close()
 		Expect(err).ToNot(HaveOccurred())
-		serverAddr2, serverConnChan2 := runServer(serverTransport2, "/ip4/127.0.0.1/udp/0/quic")
+		ln2 := runServer(serverTransport2, "/ip4/127.0.0.1/udp/0/quic")
+		defer ln2.Close()
 
 		data := bytes.Repeat([]byte{'a'}, 5*1<<20) // 5 MB
 		// wait for both servers to accept a connection
 		// then send some data
 		go func() {
-			for _, c := range []tpt.CapableConn{<-serverConnChan, <-serverConnChan2} {
+			serverConn1, err := ln1.Accept()
+			Expect(err).ToNot(HaveOccurred())
+			serverConn2, err := ln2.Accept()
+			Expect(err).ToNot(HaveOccurred())
+
+			for _, c := range []tpt.CapableConn{serverConn1, serverConn2} {
 				go func(conn tpt.CapableConn) {
 					defer GinkgoRecover()
 					str, err := conn.OpenStream()
@@ -177,10 +196,12 @@ var _ = Describe("Connection", func() {
 
 		clientTransport, err := NewTransport(clientKey)
 		Expect(err).ToNot(HaveOccurred())
-		c1, err := clientTransport.Dial(context.Background(), serverAddr, serverID)
+		c1, err := clientTransport.Dial(context.Background(), ln1.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
-		c2, err := clientTransport.Dial(context.Background(), serverAddr2, serverID2)
+		defer c1.Close()
+		c2, err := clientTransport.Dial(context.Background(), ln2.Multiaddr(), serverID2)
 		Expect(err).ToNot(HaveOccurred())
+		defer c2.Close()
 
 		done := make(chan struct{}, 2)
 		// receive the data on both connections at the same time
@@ -193,7 +214,6 @@ var _ = Describe("Connection", func() {
 				d, err := ioutil.ReadAll(str)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal(data))
-				conn.Close()
 				done <- struct{}{}
 			}(c)
 		}

@@ -3,26 +3,55 @@ package libp2pquic
 import (
 	"net"
 	"sync"
-	"sync/atomic"
+	"time"
 
 	"github.com/vishvananda/netlink"
 )
 
+// Constants. Defined as variables to simplify testing.
+var (
+	garbageCollectInterval = 30 * time.Second
+	maxUnusedDuration      = 10 * time.Second
+)
+
 type reuseConn struct {
 	net.PacketConn
-	refCount int32 // to be used as an atomic
+
+	mutex       sync.Mutex
+	refCount    int
+	unusedSince time.Time
 }
 
 func newReuseConn(conn net.PacketConn) *reuseConn {
 	return &reuseConn{PacketConn: conn}
 }
 
-func (c *reuseConn) IncreaseCount() { atomic.AddInt32(&c.refCount, 1) }
-func (c *reuseConn) DecreaseCount() { atomic.AddInt32(&c.refCount, -1) }
-func (c *reuseConn) GetCount() int  { return int(atomic.LoadInt32(&c.refCount)) }
+func (c *reuseConn) IncreaseCount() {
+	c.mutex.Lock()
+	c.refCount++
+	c.unusedSince = time.Time{}
+	c.mutex.Unlock()
+}
+
+func (c *reuseConn) DecreaseCount() {
+	c.mutex.Lock()
+	c.refCount--
+	if c.refCount == 0 {
+		c.unusedSince = time.Now()
+	}
+	c.mutex.Unlock()
+}
+
+func (c *reuseConn) ShouldGarbageCollect(now time.Time) bool {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return !c.unusedSince.IsZero() && c.unusedSince.Add(maxUnusedDuration).Before(now)
+}
 
 type reuse struct {
 	mutex sync.Mutex
+
+	garbageCollectorRunning bool
 
 	handle *netlink.Handle // Only set on Linux. nil on other systems.
 
@@ -44,6 +73,50 @@ func newReuse() (*reuse, error) {
 		global:  make(map[int]*reuseConn),
 		handle:  handle,
 	}, nil
+}
+
+func (r *reuse) runGarbageCollector() {
+	ticker := time.NewTicker(garbageCollectInterval)
+	defer ticker.Stop()
+
+	for now := range ticker.C {
+		var shouldExit bool
+		r.mutex.Lock()
+		for key, conn := range r.global {
+			if conn.ShouldGarbageCollect(now) {
+				delete(r.global, key)
+			}
+		}
+		for ukey, conns := range r.unicast {
+			for key, conn := range conns {
+				if conn.ShouldGarbageCollect(now) {
+					delete(conns, key)
+				}
+			}
+			if len(conns) == 0 {
+				delete(r.unicast, ukey)
+			}
+		}
+
+		// stop the garbage collector if we're not tracking any connections
+		if len(r.global) == 0 && len(r.unicast) == 0 {
+			r.garbageCollectorRunning = false
+			shouldExit = true
+		}
+		r.mutex.Unlock()
+
+		if shouldExit {
+			return
+		}
+	}
+}
+
+// must be called while holding the mutex
+func (r *reuse) maybeStartGarbageCollector() {
+	if !r.garbageCollectorRunning {
+		r.garbageCollectorRunning = true
+		go r.runGarbageCollector()
+	}
 }
 
 // Get the source IP that the kernel would use for dialing.
@@ -80,6 +153,7 @@ func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
 		return nil, err
 	}
 	conn.IncreaseCount()
+	r.maybeStartGarbageCollector()
 	return conn, nil
 }
 
@@ -130,6 +204,8 @@ func (r *reuse) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
 
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
+
+	r.maybeStartGarbageCollector()
 
 	// Deal with listen on a global address
 	if localAddr.IP.IsUnspecified() {

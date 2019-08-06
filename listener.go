@@ -101,7 +101,7 @@ func (l *listener) setupConn(sess quic.Session) (tpt.CapableConn, error) {
 
 // Close closes the listener.
 func (l *listener) Close() error {
-	l.conn.DecreaseCount()
+	defer l.conn.DecreaseCount()
 	return l.quicListener.Close()
 }
 
