@@ -132,20 +132,20 @@ func (r *reuse) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
 	defer r.mutex.Unlock()
 
 	// Deal with listen on a global address
-	if laddr.IP.IsUnspecified() {
+	if localAddr.IP.IsUnspecified() {
 		// The kernel already checked that the laddr is not already listen
 		// so we need not check here (when we create ListenUDP).
-		r.global[laddr.Port] = rconn
+		r.global[localAddr.Port] = rconn
 		return rconn, err
 	}
 
 	// Deal with listen on a unicast address
 	if _, ok := r.unicast[localAddr.IP.String()]; !ok {
-		r.unicast[laddr.IP.String()] = make(map[int]*reuseConn)
+		r.unicast[localAddr.IP.String()] = make(map[int]*reuseConn)
 	}
 
 	// The kernel already checked that the laddr is not already listen
 	// so we need not check here (when we create ListenUDP).
-	r.unicast[laddr.IP.String()][localAddr.Port] = rconn
+	r.unicast[localAddr.IP.String()][localAddr.Port] = rconn
 	return rconn, err
 }
