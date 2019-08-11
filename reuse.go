@@ -84,12 +84,14 @@ func (r *reuse) runGarbageCollector() {
 		r.mutex.Lock()
 		for key, conn := range r.global {
 			if conn.ShouldGarbageCollect(now) {
+				conn.Close()
 				delete(r.global, key)
 			}
 		}
 		for ukey, conns := range r.unicast {
 			for key, conn := range conns {
 				if conn.ShouldGarbageCollect(now) {
+					conn.Close()
 					delete(conns, key)
 				}
 			}
