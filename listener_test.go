@@ -33,6 +33,7 @@ var _ = Describe("Listener", func() {
 			Expect(err).ToNot(HaveOccurred())
 			ln, err := t.Listen(localAddr)
 			Expect(err).ToNot(HaveOccurred())
+			defer ln.Close()
 			netAddr := ln.Addr()
 			Expect(netAddr).To(BeAssignableToTypeOf(&net.UDPAddr{}))
 			port := netAddr.(*net.UDPAddr).Port
@@ -45,6 +46,7 @@ var _ = Describe("Listener", func() {
 			Expect(err).ToNot(HaveOccurred())
 			ln, err := t.Listen(localAddr)
 			Expect(err).ToNot(HaveOccurred())
+			defer ln.Close()
 			netAddr := ln.Addr()
 			Expect(netAddr).To(BeAssignableToTypeOf(&net.UDPAddr{}))
 			port := netAddr.(*net.UDPAddr).Port
@@ -57,6 +59,7 @@ var _ = Describe("Listener", func() {
 			Expect(err).ToNot(HaveOccurred())
 			ln, err := t.Listen(localAddr)
 			Expect(err).ToNot(HaveOccurred())
+			defer ln.Close()
 			netAddr := ln.Addr()
 			Expect(netAddr).To(BeAssignableToTypeOf(&net.UDPAddr{}))
 			port := netAddr.(*net.UDPAddr).Port
