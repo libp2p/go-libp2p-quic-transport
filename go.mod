@@ -11,4 +11,5 @@ require (
 	github.com/vishvananda/netlink v1.0.0
 	github.com/vishvananda/netns v0.0.0-20190625233234-7109fa855b0f // indirect
 	github.com/whyrusleeping/mafmt v1.2.8
+	golang.org/x/sys v0.0.0-20190526052359-791d8a0f4d09
 )

@@ -62,7 +62,7 @@ type reuse struct {
 
 func newReuse() (*reuse, error) {
 	// On non-Linux systems, this will return ErrNotImplemented.
-	handle, err := netlink.NewHandle()
+	handle, err := netlink.NewHandle(SupportedNlFamilies...)
 	if err == netlink.ErrNotImplemented {
 		handle = nil
 	} else if err != nil {
