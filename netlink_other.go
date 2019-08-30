@@ -1,4 +1,4 @@
-// +build !android
+// +build !linux
 
 package libp2pquic
 
