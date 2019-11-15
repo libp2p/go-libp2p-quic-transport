@@ -2,7 +2,6 @@ package libp2pquic
 
 import (
 	"net"
-	"runtime"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -15,6 +14,24 @@ func (c *reuseConn) GetCount() int {
 	return c.refCount
 }
 
+func closeAllConns(reuse *reuse) {
+	reuse.mutex.Lock()
+	for _, conn := range reuse.global {
+		for conn.GetCount() > 0 {
+			conn.DecreaseCount()
+		}
+	}
+	for _, conns := range reuse.unicast {
+		for _, conn := range conns {
+			for conn.GetCount() > 0 {
+				conn.DecreaseCount()
+			}
+		}
+	}
+	reuse.mutex.Unlock()
+	Eventually(isGarbageCollectorRunning).Should(BeFalse())
+}
+
 var _ = Describe("Reuse", func() {
 	var reuse *reuse
 
@@ -25,23 +42,7 @@ var _ = Describe("Reuse", func() {
 	})
 
 	Context("creating and reusing connections", func() {
-		AfterEach(func() {
-			reuse.mutex.Lock()
-			for _, conn := range reuse.global {
-				for conn.GetCount() > 0 {
-					conn.DecreaseCount()
-				}
-			}
-			for _, conns := range reuse.unicast {
-				for _, conn := range conns {
-					for conn.GetCount() > 0 {
-						conn.DecreaseCount()
-					}
-				}
-			}
-			reuse.mutex.Unlock()
-			Eventually(isGarbageCollectorRunning).Should(BeFalse())
-		})
+		AfterEach(func() { closeAllConns(reuse) })
 
 		It("creates a new global connection when listening on 0.0.0.0", func() {
 			addr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:0")
@@ -84,26 +85,6 @@ var _ = Describe("Reuse", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(conn.GetCount()).To(Equal(2))
 		})
-
-		if runtime.GOOS == "linux" {
-			It("reuses a connection it created for listening on a specific interface", func() {
-				raddr, err := net.ResolveUDPAddr("udp4", "1.1.1.1:1234")
-				Expect(err).ToNot(HaveOccurred())
-				ips, err := reuse.getSourceIPs("udp4", raddr)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(ips).ToNot(BeEmpty())
-				// listen
-				addr, err := net.ResolveUDPAddr("udp4", ips[0].String()+":0")
-				Expect(err).ToNot(HaveOccurred())
-				lconn, err := reuse.Listen("udp4", addr)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(lconn.GetCount()).To(Equal(1))
-				// dial
-				conn, err := reuse.Dial("udp4", raddr)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(conn.GetCount()).To(Equal(2))
-			})
-		}
 	})
 
 	Context("garbage-collecting connections", func() {
