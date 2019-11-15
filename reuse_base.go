@@ -4,11 +4,9 @@ import (
 	"net"
 	"sync"
 	"time"
-
-	"github.com/vishvananda/netlink"
 )
 
-// Constants. Defined as variables to simplify testing.
+// Constant. Defined as variables to simplify testing.
 var (
 	garbageCollectInterval = 30 * time.Second
 	maxUnusedDuration      = 10 * time.Second
@@ -48,34 +46,24 @@ func (c *reuseConn) ShouldGarbageCollect(now time.Time) bool {
 	return !c.unusedSince.IsZero() && c.unusedSince.Add(maxUnusedDuration).Before(now)
 }
 
-type reuse struct {
+type reuseBase struct {
 	mutex sync.Mutex
 
 	garbageCollectorRunning bool
-
-	handle *netlink.Handle // Only set on Linux. nil on other systems.
 
 	unicast map[string] /* IP.String() */ map[int] /* port */ *reuseConn
 	// global contains connections that are listening on 0.0.0.0 / ::
 	global map[int]*reuseConn
 }
 
-func newReuse() (*reuse, error) {
-	// On non-Linux systems, this will return ErrNotImplemented.
-	handle, err := netlink.NewHandle(SupportedNlFamilies...)
-	if err == netlink.ErrNotImplemented {
-		handle = nil
-	} else if err != nil {
-		return nil, err
-	}
-	return &reuse{
+func newReuseBase() reuseBase {
+	return reuseBase{
 		unicast: make(map[string]map[int]*reuseConn),
 		global:  make(map[int]*reuseConn),
-		handle:  handle,
-	}, nil
+	}
 }
 
-func (r *reuse) runGarbageCollector() {
+func (r *reuseBase) runGarbageCollector() {
 	ticker := time.NewTicker(garbageCollectInterval)
 	defer ticker.Stop()
 
@@ -114,52 +102,14 @@ func (r *reuse) runGarbageCollector() {
 }
 
 // must be called while holding the mutex
-func (r *reuse) maybeStartGarbageCollector() {
+func (r *reuseBase) maybeStartGarbageCollector() {
 	if !r.garbageCollectorRunning {
 		r.garbageCollectorRunning = true
 		go r.runGarbageCollector()
 	}
 }
 
-// Get the source IP that the kernel would use for dialing.
-// This only works on Linux.
-// On other systems, this returns an empty slice of IP addresses.
-func (r *reuse) getSourceIPs(network string, raddr *net.UDPAddr) ([]net.IP, error) {
-	if r.handle == nil {
-		return nil, nil
-	}
-
-	routes, err := r.handle.RouteGet(raddr.IP)
-	if err != nil {
-		return nil, err
-	}
-
-	ips := make([]net.IP, 0, len(routes))
-	for _, route := range routes {
-		ips = append(ips, route.Src)
-	}
-	return ips, nil
-}
-
-func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
-	ips, err := r.getSourceIPs(network, raddr)
-	if err != nil {
-		return nil, err
-	}
-
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
-	conn, err := r.dialLocked(network, raddr, ips)
-	if err != nil {
-		return nil, err
-	}
-	conn.IncreaseCount()
-	r.maybeStartGarbageCollector()
-	return conn, nil
-}
-
-func (r *reuse) dialLocked(network string, raddr *net.UDPAddr, ips []net.IP) (*reuseConn, error) {
+func (r *reuseBase) dialLocked(network string, raddr *net.UDPAddr, ips []net.IP) (*reuseConn, error) {
 	for _, ip := range ips {
 		// We already have at least one suitable connection...
 		if conns, ok := r.unicast[ip.String()]; ok {
@@ -194,7 +144,7 @@ func (r *reuse) dialLocked(network string, raddr *net.UDPAddr, ips []net.IP) (*r
 	return rconn, nil
 }
 
-func (r *reuse) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
+func (r *reuseBase) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
 	conn, err := net.ListenUDP(network, laddr)
 	if err != nil {
 		return nil, err

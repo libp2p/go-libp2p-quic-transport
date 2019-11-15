@@ -28,7 +28,7 @@ var maxUnusedDurationOrig time.Duration
 func isGarbageCollectorRunning() bool {
 	var b bytes.Buffer
 	pprof.Lookup("goroutine").WriteTo(&b, 1)
-	return strings.Contains(b.String(), "go-libp2p-quic-transport.(*reuse).runGarbageCollector")
+	return strings.Contains(b.String(), "go-libp2p-quic-transport.(*reuseBase).runGarbageCollector")
 }
 
 var _ = BeforeEach(func() {
