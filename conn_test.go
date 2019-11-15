@@ -33,7 +33,7 @@ var _ = Describe("Connection", func() {
 			priv, _, err = ic.GenerateECDSAKeyPair(rand.Reader)
 		case 1:
 			fmt.Fprintf(GinkgoWriter, " using an RSA key: ")
-			priv, _, err = ic.GenerateRSAKeyPair(1024, rand.Reader)
+			priv, _, err = ic.GenerateRSAKeyPair(2048, rand.Reader)
 		case 2:
 			fmt.Fprintf(GinkgoWriter, " using an Ed25519 key: ")
 			priv, _, err = ic.GenerateEd25519Key(rand.Reader)

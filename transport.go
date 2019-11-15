@@ -12,8 +12,8 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/multiformats/go-multiaddr-fmt"
 	manet "github.com/multiformats/go-multiaddr-net"
-	"github.com/whyrusleeping/mafmt"
 )
 
 var quicConfig = &quic.Config{
