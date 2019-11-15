@@ -19,7 +19,7 @@ var _ = Describe("Listener", func() {
 	var t tpt.Transport
 
 	BeforeEach(func() {
-		rsaKey, err := rsa.GenerateKey(rand.Reader, 1024)
+		rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
 		Expect(err).ToNot(HaveOccurred())
 		key, err := ic.UnmarshalRsaPrivateKey(x509.MarshalPKCS1PrivateKey(rsaKey))
 		Expect(err).ToNot(HaveOccurred())
