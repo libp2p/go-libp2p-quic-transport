@@ -1,3 +1,7 @@
+os:
+  - linux
+  - windows
+
 language: go
 
 go:
@@ -22,7 +26,9 @@ before_install:
 
 # see https://github.com/travis-ci/travis-ci/issues/8361#issuecomment-350090030
 before_script:
-  - sudo sh -c 'echo 0 > /proc/sys/net/ipv6/conf/all/disable_ipv6'
+  - if [ $TRAVIS_OS_NAME == "linux" ]; then
+    sudo sh -c 'echo 0 > /proc/sys/net/ipv6/conf/all/disable_ipv6';
+    fi
 
 script:
   - ginkgo -r -v --cover --randomizeAllSpecs --randomizeSuites --trace --progress
@@ -30,7 +36,9 @@ script:
 after_success:
   - cat go-libp2p-quic-transport.coverprofile > coverage.txt
   - cat */*.coverprofile >> coverage.txt
-  - bash <(curl -s https://codecov.io/bash) -f coverage.txt
+  - if [ $TRAVIS_OS_NAME == "linux" ]; then
+    bash <(curl -s https://codecov.io/bash) -f coverage.txt
+    fi
 
 cache:
   directories:
