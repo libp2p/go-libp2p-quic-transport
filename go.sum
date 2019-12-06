@@ -82,6 +82,8 @@ github.com/libp2p/go-libp2p-core v0.2.5 h1:iP1PIiIrlRrGbE1fYq2918yBc5NlCH3pFuIPS
 github.com/libp2p/go-libp2p-core v0.2.5/go.mod h1:6+5zJmKhsf7yHn1RbmYDu08qDUpIUxGdqHuEZckmZOA=
 github.com/libp2p/go-libp2p-tls v0.1.1 h1:tjW7njTM8JX8FbEvqr8/VSKBdZYZ7CtGtv3i6NiFf10=
 github.com/libp2p/go-libp2p-tls v0.1.1/go.mod h1:wZfuewxOndz5RTnCAxFliGjvYSDA40sKitV4c50uI1M=
+github.com/libp2p/go-libp2p-tls v0.1.2 h1:H96DWm11fO3+LF6fgLUfK/AtD8350RuMluFeeYXS01k=
+github.com/libp2p/go-libp2p-tls v0.1.2/go.mod h1:wZfuewxOndz5RTnCAxFliGjvYSDA40sKitV4c50uI1M=
 github.com/libp2p/go-openssl v0.0.3 h1:wjlG7HvQkt4Fq4cfH33Ivpwp0omaElYEi9z26qaIkIk=
 github.com/libp2p/go-openssl v0.0.3/go.mod h1:unDrJpgy3oFr+rqXsarWifmJuNnJR4chtO1HmaZjggc=
 github.com/lucas-clemente/quic-go v0.13.1 h1:CxtJTXQIh2aboCPk0M6vf530XOov6DZjVBiSE3nSj8s=
