@@ -6,7 +6,7 @@ require (
 	github.com/libp2p/go-libp2p-core v0.2.5
 	github.com/libp2p/go-libp2p-tls v0.1.2
 	github.com/lucas-clemente/quic-go v0.14.1
-	github.com/multiformats/go-multiaddr v0.1.2
+	github.com/multiformats/go-multiaddr v0.2.0
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
 	github.com/multiformats/go-multiaddr-net v0.1.1
 	github.com/onsi/ginkgo v1.10.3
