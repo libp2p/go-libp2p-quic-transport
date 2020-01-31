@@ -86,8 +86,8 @@ github.com/libp2p/go-libp2p-tls v0.1.2 h1:H96DWm11fO3+LF6fgLUfK/AtD8350RuMluFeeY
 github.com/libp2p/go-libp2p-tls v0.1.2/go.mod h1:wZfuewxOndz5RTnCAxFliGjvYSDA40sKitV4c50uI1M=
 github.com/libp2p/go-openssl v0.0.4 h1:d27YZvLoTyMhIN4njrkr8zMDOM4lfpHIp6A+TK9fovg=
 github.com/libp2p/go-openssl v0.0.4/go.mod h1:unDrJpgy3oFr+rqXsarWifmJuNnJR4chtO1HmaZjggc=
-github.com/lucas-clemente/quic-go v0.14.2 h1:ylSOevgZYlrTrG+cnSiXclEa6OhwbqCrTWdUmV52DKE=
-github.com/lucas-clemente/quic-go v0.14.2/go.mod h1:Vn3/Fb0/77b02SGhQk36KzOUmXgVpFfizUfW5WMaqyU=
+github.com/lucas-clemente/quic-go v0.14.3 h1:o9l+cYTaysrrlJBka18m5ieTLgm+xK9VjXLXkmt4F+0=
+github.com/lucas-clemente/quic-go v0.14.3/go.mod h1:Vn3/Fb0/77b02SGhQk36KzOUmXgVpFfizUfW5WMaqyU=
 github.com/mailru/easyjson v0.0.0-20180823135443-60711f1a8329 h1:2gxZ0XQIU/5z3Z3bUBu+FXuk2pFbkN6tcwi/pjyaDic=
 github.com/mailru/easyjson v0.0.0-20180823135443-60711f1a8329/go.mod h1:C1wdFJiN94OJF2b5HbByQZoLdCWB1Yqtg26g4irojpc=
 github.com/marten-seemann/chacha20 v0.2.0 h1:f40vqzzx+3GdOmzQoItkLX5WLvHgPgyYqFFIO5Gh4hQ=
