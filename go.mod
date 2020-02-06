@@ -8,7 +8,7 @@ require (
 	github.com/lucas-clemente/quic-go v0.14.3
 	github.com/multiformats/go-multiaddr v0.2.0
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
-	github.com/multiformats/go-multiaddr-net v0.1.1
+	github.com/multiformats/go-multiaddr-net v0.1.2
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
 	github.com/vishvananda/netlink v1.1.0
