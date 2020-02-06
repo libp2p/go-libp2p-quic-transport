@@ -10,7 +10,7 @@ require (
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
 	github.com/multiformats/go-multiaddr-net v0.1.2
 	github.com/onsi/ginkgo v1.11.0
-	github.com/onsi/gomega v1.8.1
+	github.com/onsi/gomega v1.9.0
 	github.com/vishvananda/netlink v1.1.0
 	golang.org/x/sys v0.0.0-20190904154756-749cb33beabd
 )
