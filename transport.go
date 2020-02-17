@@ -12,15 +12,15 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
-	"github.com/multiformats/go-multiaddr-fmt"
+	mafmt "github.com/multiformats/go-multiaddr-fmt"
 	manet "github.com/multiformats/go-multiaddr-net"
 )
 
 var quicConfig = &quic.Config{
 	MaxIncomingStreams:                    1000,
-	MaxIncomingUniStreams:                 -1,              // disable unidirectional streams
-	MaxReceiveStreamFlowControlWindow:     3 * (1 << 20),   // 3 MB
-	MaxReceiveConnectionFlowControlWindow: 4.5 * (1 << 20), // 4.5 MB
+	MaxIncomingUniStreams:                 -1,             // disable unidirectional streams
+	MaxReceiveStreamFlowControlWindow:     10 * (1 << 20), // 10 MB
+	MaxReceiveConnectionFlowControlWindow: 15 * (1 << 20), // 15 MB
 	AcceptToken: func(clientAddr net.Addr, _ *quic.Token) bool {
 		// TODO(#6): require source address validation when under load
 		return true
