@@ -78,11 +78,11 @@ var _ = Describe("Connection", func() {
 		Expect(conn.LocalPeer()).To(Equal(clientID))
 		Expect(conn.LocalPrivateKey()).To(Equal(clientKey))
 		Expect(conn.RemotePeer()).To(Equal(serverID))
-		Expect(conn.RemotePublicKey()).To(Equal(serverKey.GetPublic()))
+		Expect(conn.RemotePublicKey().Equals(serverKey.GetPublic())).To(BeTrue())
 		Expect(serverConn.LocalPeer()).To(Equal(serverID))
 		Expect(serverConn.LocalPrivateKey()).To(Equal(serverKey))
 		Expect(serverConn.RemotePeer()).To(Equal(clientID))
-		Expect(serverConn.RemotePublicKey()).To(Equal(clientKey.GetPublic()))
+		Expect(serverConn.RemotePublicKey().Equals(clientKey.GetPublic())).To(BeTrue())
 	})
 
 	It("handshakes on IPv6", func() {
@@ -102,11 +102,11 @@ var _ = Describe("Connection", func() {
 		Expect(conn.LocalPeer()).To(Equal(clientID))
 		Expect(conn.LocalPrivateKey()).To(Equal(clientKey))
 		Expect(conn.RemotePeer()).To(Equal(serverID))
-		Expect(conn.RemotePublicKey()).To(Equal(serverKey.GetPublic()))
+		Expect(conn.RemotePublicKey().Equals(serverKey.GetPublic())).To(BeTrue())
 		Expect(serverConn.LocalPeer()).To(Equal(serverID))
 		Expect(serverConn.LocalPrivateKey()).To(Equal(serverKey))
 		Expect(serverConn.RemotePeer()).To(Equal(clientID))
-		Expect(serverConn.RemotePublicKey()).To(Equal(clientKey.GetPublic()))
+		Expect(serverConn.RemotePublicKey().Equals(clientKey.GetPublic())).To(BeTrue())
 	})
 
 	It("opens and accepts streams", func() {
