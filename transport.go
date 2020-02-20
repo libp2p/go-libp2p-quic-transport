@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 
 	logging "github.com/ipfs/go-log"
 	ic "github.com/libp2p/go-libp2p-core/crypto"
@@ -36,12 +37,12 @@ type connManager struct {
 	reuseUDP6 *reuse
 }
 
-func newConnManager() (*connManager, error) {
-	reuseUDP4, err := newReuse()
+func newConnManager(psk *[32]byte) (*connManager, error) {
+	reuseUDP4, err := newReuse(psk)
 	if err != nil {
 		return nil, err
 	}
-	reuseUDP6, err := newReuse()
+	reuseUDP6, err := newReuse(psk)
 	if err != nil {
 		return nil, err
 	}
@@ -90,9 +91,18 @@ var _ tpt.Transport = &transport{}
 
 // NewTransport creates a new QUIC transport
 func NewTransport(key ic.PrivKey, psk pnet.PSK) (tpt.Transport, error) {
+	if pnet.ForcePrivateNetwork && len(psk) == 0 {
+		log.Error("tried to construct QUIC transport without PSK but usage of Private Networks is forced by the enviroment")
+		return nil, pnet.ErrNotInPrivateNetwork
+	}
+	var pskKey *[32]byte
 	if len(psk) > 0 {
-		log.Error("QUIC doesn't support private networks yet.")
-		return nil, errors.New("QUIC doesn't support private networks yet")
+		var p [32]byte
+		if len(psk) != 32 {
+			return nil, errors.New("expected a 32 byte PSK")
+		}
+		copy(p[:], psk)
+		pskKey = &p
 	}
 	localPeer, err := peer.IDFromPrivateKey(key)
 	if err != nil {
@@ -102,7 +112,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK) (tpt.Transport, error) {
 	if err != nil {
 		return nil, err
 	}
-	connManager, err := newConnManager()
+	connManager, err := newConnManager(pskKey)
 	if err != nil {
 		return nil, err
 	}
@@ -134,6 +144,11 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
+	keyLog, err := os.Create("keylog.txt")
+	if err != nil {
+		return nil, err
+	}
+	tlsConf.KeyLogWriter = keyLog
 	sess, err := quic.DialContext(ctx, pconn, addr, host, tlsConf, quicConfig)
 	if err != nil {
 		pconn.DecreaseCount()

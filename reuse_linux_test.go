@@ -14,7 +14,8 @@ var _ = Describe("Reuse (on Linux)", func() {
 
 	BeforeEach(func() {
 		var err error
-		reuse, err = newReuse()
+		var psk [32]byte
+		reuse, err = newReuse(&psk)
 		Expect(err).ToNot(HaveOccurred())
 	})
 

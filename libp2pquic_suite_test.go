@@ -5,12 +5,13 @@ import (
 	mrand "math/rand"
 	"runtime/pprof"
 	"strings"
+	"testing"
 	"time"
+
+	logging "github.com/ipfs/go-log"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"testing"
 )
 
 func TestLibp2pQuicTransport(t *testing.T) {
@@ -19,6 +20,7 @@ func TestLibp2pQuicTransport(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	logging.SetAllLoggers(logging.LevelDPanic)
 	mrand.Seed(GinkgoRandomSeed())
 })
 

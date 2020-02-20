@@ -37,7 +37,7 @@ var _ = Describe("Reuse", func() {
 
 	BeforeEach(func() {
 		var err error
-		reuse, err = newReuse()
+		reuse, err = newReuse(nil)
 		Expect(err).ToNot(HaveOccurred())
 	})
 

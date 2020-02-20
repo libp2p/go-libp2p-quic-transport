@@ -8,8 +8,8 @@ type reuse struct {
 	reuseBase
 }
 
-func newReuse() (*reuse, error) {
-	return &reuse{reuseBase: newReuseBase()}, nil
+func newReuse(psk *[32]byte) (*reuse, error) {
+	return &reuse{reuseBase: newReuseBase(psk)}, nil
 }
 
 func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {

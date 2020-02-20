@@ -14,7 +14,7 @@ type reuse struct {
 	handle *netlink.Handle // Only set on Linux. nil on other systems.
 }
 
-func newReuse() (*reuse, error) {
+func newReuse(psk *[32]byte) (*reuse, error) {
 	handle, err := netlink.NewHandle(SupportedNlFamilies...)
 	if err == netlink.ErrNotImplemented {
 		handle = nil
@@ -22,7 +22,7 @@ func newReuse() (*reuse, error) {
 		return nil, err
 	}
 	return &reuse{
-		reuseBase: newReuseBase(),
+		reuseBase: newReuseBase(psk),
 		handle:    handle,
 	}, nil
 }

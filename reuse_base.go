@@ -51,13 +51,16 @@ type reuseBase struct {
 
 	garbageCollectorRunning bool
 
+	psk *[32]byte
+
 	unicast map[string] /* IP.String() */ map[int] /* port */ *reuseConn
 	// global contains connections that are listening on 0.0.0.0 / ::
 	global map[int]*reuseConn
 }
 
-func newReuseBase() reuseBase {
+func newReuseBase(psk *[32]byte) reuseBase {
 	return reuseBase{
+		psk:     psk,
 		unicast: make(map[string]map[int]*reuseConn),
 		global:  make(map[int]*reuseConn),
 	}
@@ -135,9 +138,14 @@ func (r *reuseBase) dialLocked(network string, raddr *net.UDPAddr, ips []net.IP)
 	case "udp6":
 		addr = &net.UDPAddr{IP: net.IPv6zero, Port: 0}
 	}
-	conn, err := net.ListenUDP(network, addr)
+	var conn net.PacketConn
+	var err error
+	conn, err = net.ListenUDP(network, addr)
 	if err != nil {
 		return nil, err
+	}
+	if r.psk != nil {
+		conn = protectConn(conn, r.psk)
 	}
 	rconn := newReuseConn(conn)
 	r.global[conn.LocalAddr().(*net.UDPAddr).Port] = rconn
@@ -145,12 +153,17 @@ func (r *reuseBase) dialLocked(network string, raddr *net.UDPAddr, ips []net.IP)
 }
 
 func (r *reuseBase) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
-	conn, err := net.ListenUDP(network, laddr)
+	var conn net.PacketConn
+	var err error
+	conn, err = net.ListenUDP(network, laddr)
 	if err != nil {
 		return nil, err
 	}
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
+	if r.psk != nil {
+		conn = protectConn(conn, r.psk)
+	}
 	rconn := newReuseConn(conn)
 	rconn.IncreaseCount()
 
