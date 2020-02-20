@@ -62,12 +62,12 @@ var _ = Describe("Connection", func() {
 	})
 
 	It("handshakes on IPv4", func() {
-		serverTransport, err := NewTransport(serverKey)
+		serverTransport, err := NewTransport(serverKey, nil)
 		Expect(err).ToNot(HaveOccurred())
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
 
-		clientTransport, err := NewTransport(clientKey)
+		clientTransport, err := NewTransport(clientKey, nil)
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
@@ -86,12 +86,12 @@ var _ = Describe("Connection", func() {
 	})
 
 	It("handshakes on IPv6", func() {
-		serverTransport, err := NewTransport(serverKey)
+		serverTransport, err := NewTransport(serverKey, nil)
 		Expect(err).ToNot(HaveOccurred())
 		ln := runServer(serverTransport, "/ip6/::1/udp/0/quic")
 		defer ln.Close()
 
-		clientTransport, err := NewTransport(clientKey)
+		clientTransport, err := NewTransport(clientKey, nil)
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
@@ -110,12 +110,12 @@ var _ = Describe("Connection", func() {
 	})
 
 	It("opens and accepts streams", func() {
-		serverTransport, err := NewTransport(serverKey)
+		serverTransport, err := NewTransport(serverKey, nil)
 		Expect(err).ToNot(HaveOccurred())
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
 
-		clientTransport, err := NewTransport(clientKey)
+		clientTransport, err := NewTransport(clientKey, nil)
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
@@ -139,11 +139,11 @@ var _ = Describe("Connection", func() {
 	It("fails if the peer ID doesn't match", func() {
 		thirdPartyID, _ := createPeer()
 
-		serverTransport, err := NewTransport(serverKey)
+		serverTransport, err := NewTransport(serverKey, nil)
 		Expect(err).ToNot(HaveOccurred())
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
-		clientTransport, err := NewTransport(clientKey)
+		clientTransport, err := NewTransport(clientKey, nil)
 		Expect(err).ToNot(HaveOccurred())
 		// dial, but expect the wrong peer ID
 		_, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), thirdPartyID)
@@ -164,10 +164,10 @@ var _ = Describe("Connection", func() {
 	It("dials to two servers at the same time", func() {
 		serverID2, serverKey2 := createPeer()
 
-		serverTransport, err := NewTransport(serverKey)
+		serverTransport, err := NewTransport(serverKey, nil)
 		Expect(err).ToNot(HaveOccurred())
 		ln1 := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
-		serverTransport2, err := NewTransport(serverKey2)
+		serverTransport2, err := NewTransport(serverKey2, nil)
 		defer ln1.Close()
 		Expect(err).ToNot(HaveOccurred())
 		ln2 := runServer(serverTransport2, "/ip4/127.0.0.1/udp/0/quic")
@@ -194,7 +194,7 @@ var _ = Describe("Connection", func() {
 			}
 		}()
 
-		clientTransport, err := NewTransport(clientKey)
+		clientTransport, err := NewTransport(clientKey, nil)
 		Expect(err).ToNot(HaveOccurred())
 		c1, err := clientTransport.Dial(context.Background(), ln1.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
