@@ -28,7 +28,7 @@ type conn struct {
 var _ tpt.CapableConn = &conn{}
 
 func (c *conn) Close() error {
-	return c.sess.Close()
+	return c.sess.CloseWithError(0, "")
 }
 
 // IsClosed returns whether a connection is fully closed.
