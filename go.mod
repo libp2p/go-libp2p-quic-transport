@@ -5,7 +5,7 @@ go 1.13
 require (
 	github.com/libp2p/go-libp2p-core v0.3.0
 	github.com/libp2p/go-libp2p-tls v0.1.3
-	github.com/lucas-clemente/quic-go v0.15.0
+	github.com/lucas-clemente/quic-go v0.15.1
 	github.com/multiformats/go-multiaddr v0.2.0
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
 	github.com/multiformats/go-multiaddr-net v0.1.2
