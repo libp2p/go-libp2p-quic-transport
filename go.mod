@@ -6,7 +6,7 @@ require (
 	github.com/ipfs/go-log v1.0.2
 	github.com/libp2p/go-libp2p-core v0.5.0
 	github.com/libp2p/go-libp2p-tls v0.1.3
-	github.com/lucas-clemente/quic-go v0.15.1
+	github.com/lucas-clemente/quic-go v0.15.2
 	github.com/multiformats/go-multiaddr v0.2.1
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
 	github.com/multiformats/go-multiaddr-net v0.1.2
