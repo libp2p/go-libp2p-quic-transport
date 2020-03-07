@@ -16,7 +16,7 @@ type stream struct {
 
 func (s *stream) Read(b []byte) (n int, err error) {
 	n, err = s.Stream.Read(b)
-	if _, ok := err.(quic.StreamError); ok {
+	if _, ok := err.(quic.StreamError); ok && err.Canceled() {
 		err = mux.ErrReset
 	}
 
@@ -25,7 +25,7 @@ func (s *stream) Read(b []byte) (n int, err error) {
 
 func (s *stream) Write(b []byte) (n int, err error) {
 	n, err = s.Stream.Write(b)
-	if _, ok := err.(quic.StreamError); ok {
+	if _, ok := err.(quic.StreamError); ok && err.Canceled() {
 		err = mux.ErrReset
 	}
 
