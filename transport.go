@@ -5,16 +5,19 @@ import (
 	"errors"
 	"net"
 
+	logging "github.com/ipfs/go-log"
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/pnet"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
 	p2ptls "github.com/libp2p/go-libp2p-tls"
-
 	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
 	mafmt "github.com/multiformats/go-multiaddr-fmt"
 	manet "github.com/multiformats/go-multiaddr-net"
 )
+
+var log = logging.Logger("quic-transport")
 
 var quicConfig = &quic.Config{
 	MaxIncomingStreams:                    1000,
@@ -86,7 +89,11 @@ type transport struct {
 var _ tpt.Transport = &transport{}
 
 // NewTransport creates a new QUIC transport
-func NewTransport(key ic.PrivKey) (tpt.Transport, error) {
+func NewTransport(key ic.PrivKey, psk pnet.PSK) (tpt.Transport, error) {
+	if len(psk) > 0 {
+		log.Error("QUIC doesn't support private networks yet.")
+		return nil, errors.New("QUIC doesn't support private networks yet")
+	}
 	localPeer, err := peer.IDFromPrivateKey(key)
 	if err != nil {
 		return nil, err

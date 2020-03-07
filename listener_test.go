@@ -23,7 +23,7 @@ var _ = Describe("Listener", func() {
 		Expect(err).ToNot(HaveOccurred())
 		key, err := ic.UnmarshalRsaPrivateKey(x509.MarshalPKCS1PrivateKey(rsaKey))
 		Expect(err).ToNot(HaveOccurred())
-		t, err = NewTransport(key)
+		t, err = NewTransport(key, nil)
 		Expect(err).ToNot(HaveOccurred())
 	})
 

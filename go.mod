@@ -3,7 +3,8 @@ module github.com/libp2p/go-libp2p-quic-transport
 go 1.13
 
 require (
-	github.com/libp2p/go-libp2p-core v0.3.1
+	github.com/ipfs/go-log v1.0.2
+	github.com/libp2p/go-libp2p-core v0.5.0
 	github.com/libp2p/go-libp2p-tls v0.1.3
 	github.com/lucas-clemente/quic-go v0.15.1
 	github.com/multiformats/go-multiaddr v0.2.1
