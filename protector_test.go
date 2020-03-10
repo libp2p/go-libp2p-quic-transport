@@ -3,6 +3,7 @@ package libp2pquic
 import (
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"io/ioutil"
 	mrand "math/rand"
@@ -12,6 +13,8 @@ import (
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
+	p2ptls "github.com/libp2p/go-libp2p-tls"
+	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
 
 	. "github.com/onsi/ginkgo"
@@ -109,6 +112,63 @@ var _ = Describe("Protector", func() {
 		Expect(err).ToNot(HaveOccurred())
 		return ln, id
 	}
+
+	It("supports all the versions that quic-go supports", func() {
+		// quic-go doesn't export which versions it supports.
+		// To find out, we run a QUIC server and elicit a Version Negotiation packet.
+		priv, _, err := ic.GenerateRSAKeyPair(2048, rand.Reader)
+		Expect(err).ToNot(HaveOccurred())
+		identity, err := p2ptls.NewIdentity(priv)
+		Expect(err).ToNot(HaveOccurred())
+		tlsConf, _ := identity.ConfigForAny()
+
+		ln, err := quic.ListenAddr("localhost:0", tlsConf, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		conn, err := net.ListenUDP("udp", nil)
+		Expect(err).ToNot(HaveOccurred())
+		b := []byte{
+			0x80 ^ 0x40,
+			0x0a, 0x0a, 0x0a, 0x0a, // reserved version
+			0x8,                                    // destination connection ID length
+			0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, // destination connection ID
+			0x0, // source connection ID length
+		}
+		b = append(b, make([]byte, 1200)...)
+		_, err = conn.WriteTo(b, ln.Addr().(*net.UDPAddr))
+		Expect(err).ToNot(HaveOccurred())
+
+		done := make(chan struct{})
+		var versions []uint32
+		go func() {
+			defer GinkgoRecover()
+			defer close(done)
+			p := make([]byte, 1000)
+			n, _, err := conn.ReadFrom(p)
+			Expect(err).ToNot(HaveOccurred())
+			p = p[:n]
+			Expect(n).To(BeNumerically(">", 1+4 /* version number */ +1 /* dcid len */ +8 /* dcid */ +1 /* scid len */))
+			Expect(p[1:5]).To(Equal([]byte{0, 0, 0, 0})) // Version Negotation packet
+			data := p[1+4+1+8+1:]
+			for len(data) > 0 {
+				Expect(len(data)).To(BeNumerically(">=", 4))
+				versions = append(versions, binary.BigEndian.Uint32(data[:4]))
+				data = data[4:]
+			}
+		}()
+		Eventually(done).Should(BeClosed())
+		var realVersions []uint32
+		for _, v := range versions {
+			if v&0x0f0f0f0f == 0x0a0a0a0a { // greased version number
+				continue
+			}
+			realVersions = append(realVersions, v)
+		}
+		Expect(realVersions).To(HaveLen(len(supportedVersions)))
+		for _, v := range realVersions {
+			Expect(supportedVersions).To(ContainElement(v))
+		}
+	})
 
 	It("handshakes", func() {
 		ln, serverID := runServer()

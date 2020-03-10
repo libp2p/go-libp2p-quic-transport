@@ -11,7 +11,7 @@ import (
 	"golang.org/x/crypto/chacha20"
 )
 
-// TODO: check that this is exactly the set of supported versions of quic-go
+// This should match *exactly* the list of supported versions of quic-go.
 var supportedVersions = [...]uint32{0xff00001b /* draft-27 */}
 
 var (
