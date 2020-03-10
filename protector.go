@@ -2,6 +2,7 @@ package libp2pquic
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net"
 
 	"golang.org/x/crypto/chacha20"
+	"golang.org/x/crypto/hkdf"
 )
 
 // This should match *exactly* the list of supported versions of quic-go.
@@ -22,7 +24,7 @@ var (
 type protectedConn struct {
 	net.PacketConn
 
-	psk *[32]byte
+	key *[32]byte
 
 	// used as a buffer, to avoid allocations
 	readCounter  [16]byte
@@ -30,8 +32,12 @@ type protectedConn struct {
 }
 
 func protectConn(conn net.PacketConn, psk *[32]byte) net.PacketConn {
-	// TODO: run a key derivation algorithm to protect psk
-	return &protectedConn{PacketConn: conn, psk: psk}
+	r := hkdf.Expand(sha256.New, psk[:], []byte("libp2p protector"))
+	var key [32]byte
+	if _, err := io.ReadFull(r, key[:]); err != nil {
+		panic(err)
+	}
+	return &protectedConn{PacketConn: conn, key: &key}
 }
 
 func (c *protectedConn) ReadFrom(p []byte) (n int, addr net.Addr, rerr error) {
@@ -130,7 +136,7 @@ func (c *protectedConn) skipConnID(r *bytes.Reader) error {
 // payload must be at least 16 bytes long.
 func (c *protectedConn) encryptPayload(payload []byte) {
 	sample := payload[len(payload)-16:]
-	cipher, err := chacha20.NewUnauthenticatedCipher(c.psk[:], sample[4:])
+	cipher, err := chacha20.NewUnauthenticatedCipher(c.key[:], sample[4:])
 	if err != nil {
 		panic(err)
 	}
