@@ -41,22 +41,26 @@ func protectConn(conn net.PacketConn, psk *[32]byte) net.PacketConn {
 }
 
 func (c *protectedConn) ReadFrom(p []byte) (n int, addr net.Addr, rerr error) {
-	n, addr, rerr = c.PacketConn.ReadFrom(p)
-	if rerr != nil || n == 0 {
-		return
-	}
-	data := p[:n]
-	for len(data) > 0 {
-		length, err := c.maybeProtectPacket(data)
-		if err != nil {
-			if err == errUnknownVersion {
-				// TODO: send version negotiation packet
-				return c.ReadFrom(p)
-			}
-			// let the QUIC stack handle the packet
+readLoop:
+	for {
+		n, addr, rerr = c.PacketConn.ReadFrom(p)
+		if rerr != nil || n == 0 {
 			return
 		}
-		data = data[length:]
+		data := p[:n]
+		for len(data) > 0 {
+			length, err := c.maybeProtectPacket(data)
+			if err != nil {
+				if err == errUnknownVersion {
+					// TODO: send version negotiation packet
+					continue readLoop
+				}
+				// let the QUIC stack handle the packet
+				return
+			}
+			data = data[length:]
+		}
+		break
 	}
 	return
 }
