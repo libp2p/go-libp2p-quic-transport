@@ -2,8 +2,12 @@ package libp2pquic
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"io"
 	"net"
+
+	"golang.org/x/crypto/hkdf"
 
 	logging "github.com/ipfs/go-log"
 	ic "github.com/libp2p/go-libp2p-core/crypto"
@@ -85,6 +89,7 @@ type transport struct {
 	localPeer   peer.ID
 	identity    *p2ptls.Identity
 	connManager *connManager
+	config      *quic.Config
 }
 
 var _ tpt.Transport = &transport{}
@@ -107,12 +112,23 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, filters *filter.Filters) (tpt.Tr
 	if err != nil {
 		return nil, err
 	}
+	config := quicConfig.Clone()
+	keyBytes, err := key.Raw()
+	if err != nil {
+		return nil, err
+	}
+	keyReader := hkdf.Expand(sha256.New, keyBytes, []byte("libp2p quic stateless reset key"))
+	config.StatelessResetKey = make([]byte, 32)
+	if _, err := io.ReadFull(keyReader, config.StatelessResetKey); err != nil {
+		return nil, err
+	}
 
 	return &transport{
 		privKey:     key,
 		localPeer:   localPeer,
 		identity:    identity,
 		connManager: connManager,
+		config:      config,
 	}, nil
 }
 
@@ -135,7 +151,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	sess, err := quic.DialContext(ctx, pconn, addr, host, tlsConf, quicConfig)
+	sess, err := quic.DialContext(ctx, pconn, addr, host, tlsConf, t.config)
 	if err != nil {
 		pconn.DecreaseCount()
 		return nil, err

@@ -8,12 +8,14 @@ import (
 	"io/ioutil"
 	mrand "math/rand"
 	"net"
+	"sync/atomic"
 	"time"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
 	filter "github.com/libp2p/go-maddr-filter"
+	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	ma "github.com/multiformats/go-multiaddr"
 
 	. "github.com/onsi/ginkgo"
@@ -52,9 +54,9 @@ var _ = Describe("Connection", func() {
 
 	runServer := func(tr tpt.Transport, multiaddr string) tpt.Listener {
 		addr, err := ma.NewMultiaddr(multiaddr)
-		Expect(err).ToNot(HaveOccurred())
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		ln, err := tr.Listen(addr)
-		Expect(err).ToNot(HaveOccurred())
+		ExpectWithOffset(1, err).ToNot(HaveOccurred())
 		return ln
 	}
 
@@ -183,13 +185,13 @@ var _ = Describe("Connection", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		// make sure that connection attempts fails
-		quicConfig.HandshakeTimeout = 250 * time.Millisecond
+		clientTransport.(*transport).config.HandshakeTimeout = 250 * time.Millisecond
 		_, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).To(HaveOccurred())
 		Expect(err.(net.Error).Timeout()).To(BeTrue())
 
 		// now allow the address and make sure the connection goes through
-		quicConfig.HandshakeTimeout = 2 * time.Second
+		clientTransport.(*transport).config.HandshakeTimeout = 2 * time.Second
 		filters.AddFilter(ipNet, filter.ActionAccept)
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
@@ -255,5 +257,51 @@ var _ = Describe("Connection", func() {
 
 		Eventually(done, 5*time.Second).Should(Receive())
 		Eventually(done, 5*time.Second).Should(Receive())
+	})
+
+	It("sends stateless resets", func() {
+		serverTransport, err := NewTransport(serverKey, nil, nil)
+		Expect(err).ToNot(HaveOccurred())
+		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
+
+		var drop uint32
+		serverPort := ln.Addr().(*net.UDPAddr).Port
+		proxy, err := quicproxy.NewQuicProxy("localhost:0", &quicproxy.Opts{
+			RemoteAddr: fmt.Sprintf("localhost:%d", serverPort),
+			DropPacket: func(quicproxy.Direction, []byte) bool {
+				return atomic.LoadUint32(&drop) > 0
+			},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		defer proxy.Close()
+
+		// establish a connection
+		clientTransport, err := NewTransport(clientKey, nil, nil)
+		Expect(err).ToNot(HaveOccurred())
+		proxyAddr, err := toQuicMultiaddr(proxy.LocalAddr())
+		Expect(err).ToNot(HaveOccurred())
+		conn, err := clientTransport.Dial(context.Background(), proxyAddr, serverID)
+		Expect(err).ToNot(HaveOccurred())
+		str, err := conn.OpenStream()
+		Expect(err).ToNot(HaveOccurred())
+
+		// Stop forwarding packets and close the server.
+		// This prevents the CONNECTION_CLOSE from reaching the client.
+		atomic.StoreUint32(&drop, 1)
+		Expect(ln.Close()).To(Succeed())
+		time.Sleep(100 * time.Millisecond) // give the kernel some time to free the UDP port
+		ln = runServer(serverTransport, fmt.Sprintf("/ip4/127.0.0.1/udp/%d/quic", serverPort))
+		defer ln.Close()
+		// Now that the new server is up, re-enable packet forwarding.
+		atomic.StoreUint32(&drop, 0)
+
+		// The new server doesn't have any state for the previously established connection.
+		// We expect it to send a stateless reset.
+		_, rerr := str.Write([]byte("foobar"))
+		if rerr == nil {
+			_, rerr = str.Read([]byte{0, 0})
+		}
+		Expect(rerr).To(HaveOccurred())
+		Expect(rerr.Error()).To(ContainSubstring("received a stateless reset"))
 	})
 })
