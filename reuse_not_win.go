@@ -5,6 +5,8 @@ package libp2pquic
 import (
 	"net"
 
+	filter "github.com/libp2p/go-maddr-filter"
+
 	"github.com/vishvananda/netlink"
 )
 
@@ -14,7 +16,7 @@ type reuse struct {
 	handle *netlink.Handle // Only set on Linux. nil on other systems.
 }
 
-func newReuse() (*reuse, error) {
+func newReuse(filters *filter.Filters) (*reuse, error) {
 	handle, err := netlink.NewHandle(SupportedNlFamilies...)
 	if err == netlink.ErrNotImplemented {
 		handle = nil
@@ -22,7 +24,7 @@ func newReuse() (*reuse, error) {
 		return nil, err
 	}
 	return &reuse{
-		reuseBase: newReuseBase(),
+		reuseBase: newReuseBase(filters),
 		handle:    handle,
 	}, nil
 }

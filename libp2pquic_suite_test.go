@@ -5,12 +5,13 @@ import (
 	mrand "math/rand"
 	"runtime/pprof"
 	"strings"
+	"testing"
 	"time"
+
+	"github.com/lucas-clemente/quic-go"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"testing"
 )
 
 func TestLibp2pQuicTransport(t *testing.T) {
@@ -22,8 +23,11 @@ var _ = BeforeSuite(func() {
 	mrand.Seed(GinkgoRandomSeed())
 })
 
-var garbageCollectIntervalOrig time.Duration
-var maxUnusedDurationOrig time.Duration
+var (
+	garbageCollectIntervalOrig time.Duration
+	maxUnusedDurationOrig      time.Duration
+	origQuicConfig             *quic.Config
+)
 
 func isGarbageCollectorRunning() bool {
 	var b bytes.Buffer
@@ -37,10 +41,13 @@ var _ = BeforeEach(func() {
 	maxUnusedDurationOrig = maxUnusedDuration
 	garbageCollectInterval = 50 * time.Millisecond
 	maxUnusedDuration = 0
+	origQuicConfig = quicConfig
+	quicConfig = quicConfig.Clone()
 })
 
 var _ = AfterEach(func() {
 	Eventually(isGarbageCollectorRunning).Should(BeFalse())
 	garbageCollectInterval = garbageCollectIntervalOrig
 	maxUnusedDuration = maxUnusedDurationOrig
+	quicConfig = origQuicConfig
 })

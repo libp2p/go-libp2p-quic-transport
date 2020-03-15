@@ -2,14 +2,18 @@
 
 package libp2pquic
 
-import "net"
+import (
+	"net"
+
+	filter "github.com/libp2p/go-maddr-filter"
+)
 
 type reuse struct {
 	reuseBase
 }
 
-func newReuse() (*reuse, error) {
-	return &reuse{reuseBase: newReuseBase()}, nil
+func newReuse(filters *filter.Filters) (*reuse, error) {
+	return &reuse{reuseBase: newReuseBase(filters)}, nil
 }
 
 func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {

@@ -4,6 +4,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	filter "github.com/libp2p/go-maddr-filter"
 )
 
 // Constant. Defined as variables to simplify testing.
@@ -20,7 +22,10 @@ type reuseConn struct {
 	unusedSince time.Time
 }
 
-func newReuseConn(conn net.PacketConn) *reuseConn {
+func newReuseConn(conn net.PacketConn, filters *filter.Filters) *reuseConn {
+	if filters != nil {
+		conn = newFilteredConn(conn, filters)
+	}
 	return &reuseConn{PacketConn: conn}
 }
 
@@ -49,6 +54,8 @@ func (c *reuseConn) ShouldGarbageCollect(now time.Time) bool {
 type reuseBase struct {
 	mutex sync.Mutex
 
+	filters *filter.Filters
+
 	garbageCollectorRunning bool
 
 	unicast map[string] /* IP.String() */ map[int] /* port */ *reuseConn
@@ -56,8 +63,9 @@ type reuseBase struct {
 	global map[int]*reuseConn
 }
 
-func newReuseBase() reuseBase {
+func newReuseBase(filters *filter.Filters) reuseBase {
 	return reuseBase{
+		filters: filters,
 		unicast: make(map[string]map[int]*reuseConn),
 		global:  make(map[int]*reuseConn),
 	}
@@ -139,7 +147,7 @@ func (r *reuseBase) dialLocked(network string, raddr *net.UDPAddr, ips []net.IP)
 	if err != nil {
 		return nil, err
 	}
-	rconn := newReuseConn(conn)
+	rconn := newReuseConn(conn, r.filters)
 	r.global[conn.LocalAddr().(*net.UDPAddr).Port] = rconn
 	return rconn, nil
 }
@@ -151,7 +159,7 @@ func (r *reuseBase) Listen(network string, laddr *net.UDPAddr) (*reuseConn, erro
 	}
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
-	rconn := newReuseConn(conn)
+	rconn := newReuseConn(conn, r.filters)
 	rconn.IncreaseCount()
 
 	r.mutex.Lock()

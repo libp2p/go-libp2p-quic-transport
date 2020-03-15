@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	mrand "math/rand"
+	"net"
 	"time"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
+	filter "github.com/libp2p/go-maddr-filter"
 	ma "github.com/multiformats/go-multiaddr"
 
 	. "github.com/onsi/ginkgo"
@@ -62,12 +64,12 @@ var _ = Describe("Connection", func() {
 	})
 
 	It("handshakes on IPv4", func() {
-		serverTransport, err := NewTransport(serverKey, nil)
+		serverTransport, err := NewTransport(serverKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
 
-		clientTransport, err := NewTransport(clientKey, nil)
+		clientTransport, err := NewTransport(clientKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
@@ -86,12 +88,12 @@ var _ = Describe("Connection", func() {
 	})
 
 	It("handshakes on IPv6", func() {
-		serverTransport, err := NewTransport(serverKey, nil)
+		serverTransport, err := NewTransport(serverKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		ln := runServer(serverTransport, "/ip6/::1/udp/0/quic")
 		defer ln.Close()
 
-		clientTransport, err := NewTransport(clientKey, nil)
+		clientTransport, err := NewTransport(clientKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
@@ -110,12 +112,12 @@ var _ = Describe("Connection", func() {
 	})
 
 	It("opens and accepts streams", func() {
-		serverTransport, err := NewTransport(serverKey, nil)
+		serverTransport, err := NewTransport(serverKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
 
-		clientTransport, err := NewTransport(clientKey, nil)
+		clientTransport, err := NewTransport(clientKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
@@ -139,11 +141,11 @@ var _ = Describe("Connection", func() {
 	It("fails if the peer ID doesn't match", func() {
 		thirdPartyID, _ := createPeer()
 
-		serverTransport, err := NewTransport(serverKey, nil)
+		serverTransport, err := NewTransport(serverKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
-		clientTransport, err := NewTransport(clientKey, nil)
+		clientTransport, err := NewTransport(clientKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		// dial, but expect the wrong peer ID
 		_, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), thirdPartyID)
@@ -161,14 +163,47 @@ var _ = Describe("Connection", func() {
 		Eventually(done).Should(BeClosed())
 	})
 
+	It("filters addresses", func() {
+		filters := filter.NewFilters()
+		ipNet := net.IPNet{
+			IP:   net.IPv4(127, 0, 0, 1),
+			Mask: net.IPv4Mask(255, 255, 255, 255),
+		}
+		filters.AddFilter(ipNet, filter.ActionDeny)
+		testMA, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/1234/quic")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(filters.AddrBlocked(testMA)).To(BeTrue())
+
+		serverTransport, err := NewTransport(serverKey, nil, filters)
+		Expect(err).ToNot(HaveOccurred())
+		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
+		defer ln.Close()
+
+		clientTransport, err := NewTransport(clientKey, nil, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		// make sure that connection attempts fails
+		quicConfig.HandshakeTimeout = 250 * time.Millisecond
+		_, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
+		Expect(err).To(HaveOccurred())
+		Expect(err.(net.Error).Timeout()).To(BeTrue())
+
+		// now allow the address and make sure the connection goes through
+		quicConfig.HandshakeTimeout = 2 * time.Second
+		filters.AddFilter(ipNet, filter.ActionAccept)
+		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
+		Expect(err).ToNot(HaveOccurred())
+		conn.Close()
+	})
+
 	It("dials to two servers at the same time", func() {
 		serverID2, serverKey2 := createPeer()
 
-		serverTransport, err := NewTransport(serverKey, nil)
+		serverTransport, err := NewTransport(serverKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		ln1 := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
-		serverTransport2, err := NewTransport(serverKey2, nil)
 		defer ln1.Close()
+		serverTransport2, err := NewTransport(serverKey2, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		ln2 := runServer(serverTransport2, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln2.Close()
@@ -194,7 +229,7 @@ var _ = Describe("Connection", func() {
 			}
 		}()
 
-		clientTransport, err := NewTransport(clientKey, nil)
+		clientTransport, err := NewTransport(clientKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
 		c1, err := clientTransport.Dial(context.Background(), ln1.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())

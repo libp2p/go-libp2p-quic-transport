@@ -11,6 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/pnet"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
 	p2ptls "github.com/libp2p/go-libp2p-tls"
+	filter "github.com/libp2p/go-maddr-filter"
 	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
 	mafmt "github.com/multiformats/go-multiaddr-fmt"
@@ -36,12 +37,12 @@ type connManager struct {
 	reuseUDP6 *reuse
 }
 
-func newConnManager() (*connManager, error) {
-	reuseUDP4, err := newReuse()
+func newConnManager(filters *filter.Filters) (*connManager, error) {
+	reuseUDP4, err := newReuse(filters)
 	if err != nil {
 		return nil, err
 	}
-	reuseUDP6, err := newReuse()
+	reuseUDP6, err := newReuse(filters)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +90,7 @@ type transport struct {
 var _ tpt.Transport = &transport{}
 
 // NewTransport creates a new QUIC transport
-func NewTransport(key ic.PrivKey, psk pnet.PSK) (tpt.Transport, error) {
+func NewTransport(key ic.PrivKey, psk pnet.PSK, filters *filter.Filters) (tpt.Transport, error) {
 	if len(psk) > 0 {
 		log.Error("QUIC doesn't support private networks yet.")
 		return nil, errors.New("QUIC doesn't support private networks yet")
@@ -102,7 +103,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK) (tpt.Transport, error) {
 	if err != nil {
 		return nil, err
 	}
-	connManager, err := newConnManager()
+	connManager, err := newConnManager(filters)
 	if err != nil {
 		return nil, err
 	}
