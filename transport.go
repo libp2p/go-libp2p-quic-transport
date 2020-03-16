@@ -121,16 +121,16 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	udpAddr, err := net.ResolveUDPAddr(network, host)
+	addr, err := net.ResolveUDPAddr(network, host)
 	if err != nil {
 		return nil, err
 	}
-	addr, err := fromQuicMultiaddr(raddr)
+	remoteMultiaddr, err := toQuicMultiaddr(addr)
 	if err != nil {
 		return nil, err
 	}
 	tlsConf, keyCh := t.identity.ConfigForPeer(p)
-	pconn, err := t.connManager.Dial(network, udpAddr)
+	pconn, err := t.connManager.Dial(network, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		localMultiaddr:  localMultiaddr,
 		remotePubKey:    remotePubKey,
 		remotePeerID:    p,
-		remoteMultiaddr: raddr,
+		remoteMultiaddr: remoteMultiaddr,
 	}, nil
 }
 
