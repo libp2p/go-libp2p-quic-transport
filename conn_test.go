@@ -91,7 +91,7 @@ var _ = Describe("Connection", func() {
 		addr, err := ma.NewMultiaddr("/dns/google.com/udp/443/quic")
 		Expect(err).ToNot(HaveOccurred())
 		_, err = clientTransport.Dial(context.Background(), addr, serverID)
-		Expect(err).To(MatchError("cannot dial a /dns address"))
+		Expect(err).To(MatchError("cannot dial this address"))
 	})
 
 	It("handshakes on IPv6", func() {
