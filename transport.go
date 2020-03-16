@@ -117,6 +117,9 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK) (tpt.Transport, error) {
 
 // Dial dials a new QUIC connection
 func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tpt.CapableConn, error) {
+	if protocols := raddr.Protocols(); len(protocols) > 0 && protocols[0].Code == ma.P_DNS {
+		return nil, errors.New("cannot dial a /dns address")
+	}
 	network, host, err := manet.DialArgs(raddr)
 	if err != nil {
 		return nil, err

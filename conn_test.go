@@ -85,6 +85,15 @@ var _ = Describe("Connection", func() {
 		Expect(serverConn.RemotePublicKey().Equals(clientKey.GetPublic())).To(BeTrue())
 	})
 
+	It("rejects /dns addresses", func() {
+		clientTransport, err := NewTransport(clientKey, nil)
+		Expect(err).ToNot(HaveOccurred())
+		addr, err := ma.NewMultiaddr("/dns/google.com/udp/443/quic")
+		Expect(err).ToNot(HaveOccurred())
+		_, err = clientTransport.Dial(context.Background(), addr, serverID)
+		Expect(err).To(MatchError("cannot dial a /dns address"))
+	})
+
 	It("handshakes on IPv6", func() {
 		serverTransport, err := NewTransport(serverKey, nil)
 		Expect(err).ToNot(HaveOccurred())
