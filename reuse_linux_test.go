@@ -14,7 +14,7 @@ var _ = Describe("Reuse (on Linux)", func() {
 
 	BeforeEach(func() {
 		var err error
-		reuse, err = newReuse()
+		reuse, err = newReuse(nil)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
