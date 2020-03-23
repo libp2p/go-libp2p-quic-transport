@@ -117,7 +117,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, filters *filter.Filters) (tpt.Tr
 	if err != nil {
 		return nil, err
 	}
-	keyReader := hkdf.Expand(sha256.New, keyBytes, []byte("libp2p quic stateless reset key"))
+	keyReader := hkdf.New(sha256.New, keyBytes, nil, []byte("libp2p quic stateless reset key"))
 	config.StatelessResetKey = make([]byte, 32)
 	if _, err := io.ReadFull(keyReader, config.StatelessResetKey); err != nil {
 		return nil, err
