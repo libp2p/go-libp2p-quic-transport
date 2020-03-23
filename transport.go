@@ -2,11 +2,11 @@ package libp2pquic
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"io"
 	"net"
 
+	"github.com/minio/sha256-simd"
 	"golang.org/x/crypto/hkdf"
 
 	logging "github.com/ipfs/go-log"
