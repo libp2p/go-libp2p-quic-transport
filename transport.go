@@ -36,6 +36,8 @@ var quicConfig = &quic.Config{
 	KeepAlive: true,
 }
 
+const statelessResetKeyInfo = "libp2p quic stateless reset key"
+
 type connManager struct {
 	reuseUDP4 *reuse
 	reuseUDP6 *reuse
@@ -117,7 +119,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, filters *filter.Filters) (tpt.Tr
 	if err != nil {
 		return nil, err
 	}
-	keyReader := hkdf.New(sha256.New, keyBytes, nil, []byte("libp2p quic stateless reset key"))
+	keyReader := hkdf.New(sha256.New, keyBytes, nil, []byte(statelessResetKeyInfo))
 	config.StatelessResetKey = make([]byte, 32)
 	if _, err := io.ReadFull(keyReader, config.StatelessResetKey); err != nil {
 		return nil, err
