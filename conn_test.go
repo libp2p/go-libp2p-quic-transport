@@ -185,13 +185,13 @@ var _ = Describe("Connection", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		// make sure that connection attempts fails
-		clientTransport.(*transport).config.HandshakeTimeout = 250 * time.Millisecond
+		clientTransport.(*transport).clientConfig.HandshakeTimeout = 250 * time.Millisecond
 		_, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).To(HaveOccurred())
 		Expect(err.(net.Error).Timeout()).To(BeTrue())
 
 		// now allow the address and make sure the connection goes through
-		clientTransport.(*transport).config.HandshakeTimeout = 2 * time.Second
+		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
 		filters.AddFilter(ipNet, filter.ActionAccept)
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
