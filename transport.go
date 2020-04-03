@@ -190,9 +190,12 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	}, nil
 }
 
+// Don't use mafmt.QUIC as we don't want to dial DNS addresses. Just /ip{4,6}/udp/quic
+var dialMatcher = mafmt.And(mafmt.IP, mafmt.Base(ma.P_UDP), mafmt.Base(ma.P_QUIC))
+
 // CanDial determines if we can dial to an address
 func (t *transport) CanDial(addr ma.Multiaddr) bool {
-	return mafmt.QUIC.Matches(addr)
+	return dialMatcher.Matches(addr)
 }
 
 // Listen listens for new QUIC connections on the passed multiaddr.

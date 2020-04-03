@@ -24,6 +24,12 @@ var _ = Describe("Transport", func() {
 		Expect(t.CanDial(validAddr)).To(BeTrue())
 	})
 
+	It("says that it cannot dial /dns addresses", func() {
+		addr, err := ma.NewMultiaddr("/dns/google.com/udp/443/quic")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(t.CanDial(addr)).To(BeFalse())
+	})
+
 	It("supports the QUIC protocol", func() {
 		protocols := t.Protocols()
 		Expect(protocols).To(HaveLen(1))
