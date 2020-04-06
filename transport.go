@@ -1,10 +1,15 @@
 package libp2pquic
 
 import (
+	"bufio"
+	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
+	"os"
+	"time"
 
 	"github.com/minio/sha256-simd"
 	"golang.org/x/crypto/hkdf"
@@ -87,11 +92,12 @@ func (c *connManager) Dial(network string, raddr *net.UDPAddr) (*reuseConn, erro
 
 // The Transport implements the tpt.Transport interface for QUIC connections.
 type transport struct {
-	privKey     ic.PrivKey
-	localPeer   peer.ID
-	identity    *p2ptls.Identity
-	connManager *connManager
-	config      *quic.Config
+	privKey      ic.PrivKey
+	localPeer    peer.ID
+	identity     *p2ptls.Identity
+	connManager  *connManager
+	serverConfig *quic.Config
+	clientConfig *quic.Config
 }
 
 var _ tpt.Transport = &transport{}
@@ -125,13 +131,17 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, filters *filter.Filters) (tpt.Tr
 		return nil, err
 	}
 
-	return &transport{
-		privKey:     key,
-		localPeer:   localPeer,
-		identity:    identity,
-		connManager: connManager,
-		config:      config,
-	}, nil
+	t := &transport{
+		privKey:      key,
+		localPeer:    localPeer,
+		identity:     identity,
+		connManager:  connManager,
+		serverConfig: config,
+		clientConfig: config.Clone(),
+	}
+	t.serverConfig.GetLogWriter = t.GetLogWriterFor("server")
+	t.clientConfig.GetLogWriter = t.GetLogWriterFor("client")
+	return t, nil
 }
 
 // Dial dials a new QUIC connection
@@ -153,7 +163,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	sess, err := quic.DialContext(ctx, pconn, addr, host, tlsConf, t.config)
+	sess, err := quic.DialContext(ctx, pconn, addr, host, tlsConf, t.clientConfig)
 	if err != nil {
 		pconn.DecreaseCount()
 		return nil, err
@@ -188,6 +198,29 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		remotePeerID:    p,
 		remoteMultiaddr: remoteMultiaddr,
 	}, nil
+}
+
+func (t *transport) GetLogWriterFor(role string) func([]byte) io.WriteCloser {
+	qlogDir := os.Getenv("QLOGDIR")
+	if len(qlogDir) == 0 {
+		return nil
+	}
+	return func(connID []byte) io.WriteCloser {
+		// create the QLOGDIR, if it doesn't exist
+		if err := os.MkdirAll(qlogDir, 0777); err != nil {
+			log.Errorf("creating the QLOGDIR failed: %s", err)
+			return nil
+		}
+		t := time.Now().Format(time.RFC3339Nano)
+		filename := fmt.Sprintf("%s/log_%s_%s_%x.qlog.gz", qlogDir, t, role, connID)
+		f, err := os.Create(filename)
+		if err != nil {
+			log.Errorf("unable to create qlog file %s: %s", filename, err)
+			return nil
+		}
+		gz := gzip.NewWriter(f)
+		return newBufferedWriteCloser(bufio.NewWriter(gz), gz)
+	}
 }
 
 // Don't use mafmt.QUIC as we don't want to dial DNS addresses. Just /ip{4,6}/udp/quic

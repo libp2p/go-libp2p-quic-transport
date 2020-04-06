@@ -36,7 +36,7 @@ func newListener(rconn *reuseConn, t *transport, localPeer peer.ID, key ic.PrivK
 		conf, _ := identity.ConfigForAny()
 		return conf, nil
 	}
-	ln, err := quic.Listen(rconn, &tlsConf, t.config)
+	ln, err := quic.Listen(rconn, &tlsConf, t.serverConfig)
 	if err != nil {
 		return nil, err
 	}
