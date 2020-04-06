@@ -213,8 +213,7 @@ func (t *transport) GetLogWriterFor(role string) func([]byte) io.WriteCloser {
 				return nil
 			}
 		}
-		now := time.Now()
-		t := fmt.Sprintf("%d-%02d-%02dT%02d-%02d-%02d-%06d", now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), now.Second(), now.Nanosecond()/1000)
+		t := time.Now().Format(time.RFC3339Nano)
 		filename := fmt.Sprintf("%s/log_%s_%s_%x.qlog.gz", qlogDir, t, role, connID)
 		f, err := os.Create(filename)
 		if err != nil {
