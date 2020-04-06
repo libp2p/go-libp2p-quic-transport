@@ -207,11 +207,9 @@ func (t *transport) GetLogWriterFor(role string) func([]byte) io.WriteCloser {
 	}
 	return func(connID []byte) io.WriteCloser {
 		// create the QLOGDIR, if it doesn't exist
-		if _, err := os.Stat(qlogDir); os.IsNotExist(err) {
-			if err := os.MkdirAll(qlogDir, 0777); err != nil {
-				log.Errorf("creating the QLOGDIR failed: %s", err)
-				return nil
-			}
+		if err := os.MkdirAll(qlogDir, 0777); err != nil {
+			log.Errorf("creating the QLOGDIR failed: %s", err)
+			return nil
 		}
 		t := time.Now().Format(time.RFC3339Nano)
 		filename := fmt.Sprintf("%s/log_%s_%s_%x.qlog.gz", qlogDir, t, role, connID)
