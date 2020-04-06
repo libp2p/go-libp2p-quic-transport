@@ -36,9 +36,7 @@ var _ = Describe("Reuse", func() {
 	var reuse *reuse
 
 	BeforeEach(func() {
-		var err error
-		reuse, err = newReuse(nil)
-		Expect(err).ToNot(HaveOccurred())
+		reuse = newReuse(nil)
 	})
 
 	Context("creating and reusing connections", func() {

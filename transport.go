@@ -49,14 +49,9 @@ type connManager struct {
 }
 
 func newConnManager(filters *filter.Filters) (*connManager, error) {
-	reuseUDP4, err := newReuse(filters)
-	if err != nil {
-		return nil, err
-	}
-	reuseUDP6, err := newReuse(filters)
-	if err != nil {
-		return nil, err
-	}
+	reuseUDP4 := newReuse(filters)
+	reuseUDP6 := newReuse(filters)
+
 	return &connManager{
 		reuseUDP4: reuseUDP4,
 		reuseUDP6: reuseUDP6,
