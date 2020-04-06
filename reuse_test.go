@@ -4,6 +4,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/libp2p/go-netroute"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -30,6 +31,14 @@ func closeAllConns(reuse *reuse) {
 	}
 	reuse.mutex.Unlock()
 	Eventually(isGarbageCollectorRunning).Should(BeFalse())
+}
+
+func OnPlatformsWithRoutingTablesIt(description string, f interface{}) {
+	if _, err := netroute.New(); err == nil {
+		It(description, f)
+	} else {
+		PIt(description, f)
+	}
 }
 
 var _ = Describe("Reuse", func() {
@@ -79,6 +88,26 @@ var _ = Describe("Reuse", func() {
 			// dial
 			raddr, err := net.ResolveUDPAddr("udp4", "1.1.1.1:1234")
 			Expect(err).ToNot(HaveOccurred())
+			conn, err := reuse.Dial("udp4", raddr)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(conn.GetCount()).To(Equal(2))
+		})
+
+		OnPlatformsWithRoutingTablesIt("reuses a connection it created for listening on a specific interface", func() {
+			router, err := netroute.New()
+			Expect(err).ToNot(HaveOccurred())
+
+			raddr, err := net.ResolveUDPAddr("udp4", "1.1.1.1:1234")
+			Expect(err).ToNot(HaveOccurred())
+			_, _, ip, err := router.Route(raddr.IP)
+			Expect(err).ToNot(HaveOccurred())
+			// listen
+			addr, err := net.ResolveUDPAddr("udp4", ip.String()+":0")
+			Expect(err).ToNot(HaveOccurred())
+			lconn, err := reuse.Listen("udp4", addr)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(lconn.GetCount()).To(Equal(1))
+			// dial
 			conn, err := reuse.Dial("udp4", raddr)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(conn.GetCount()).To(Equal(2))
