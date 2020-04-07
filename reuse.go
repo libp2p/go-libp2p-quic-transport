@@ -118,18 +118,18 @@ func (r *reuse) maybeStartGarbageCollector() {
 	}
 }
 func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
-	ips := []net.IP{}
+	var ip *net.IP
 	if router, err := netroute.New(); err == nil {
 		_, _, src, err := router.Route(raddr.IP)
 		if err == nil && !src.IsUnspecified() {
-			ips = append(ips, src)
+			ip = &src
 		}
 	}
 
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	conn, err := r.dialLocked(network, raddr, ips)
+	conn, err := r.dialLocked(network, raddr, ip)
 	if err != nil {
 		return nil, err
 	}
@@ -138,10 +138,10 @@ func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
 	return conn, nil
 }
 
-func (r *reuse) dialLocked(network string, raddr *net.UDPAddr, ips []net.IP) (*reuseConn, error) {
-	for _, ip := range ips {
+func (r *reuse) dialLocked(network string, raddr *net.UDPAddr, source *net.IP) (*reuseConn, error) {
+	if source != nil {
 		// We already have at least one suitable connection...
-		if conns, ok := r.unicast[ip.String()]; ok {
+		if conns, ok := r.unicast[source.String()]; ok {
 			// ... we don't care which port we're dialing from. Just use the first.
 			for _, c := range conns {
 				return c, nil
