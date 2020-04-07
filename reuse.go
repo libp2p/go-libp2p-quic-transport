@@ -6,6 +6,7 @@ import (
 	"time"
 
 	filter "github.com/libp2p/go-maddr-filter"
+	"github.com/libp2p/go-netroute"
 )
 
 // Constant. Defined as variables to simplify testing.
@@ -51,7 +52,7 @@ func (c *reuseConn) ShouldGarbageCollect(now time.Time) bool {
 	return !c.unusedSince.IsZero() && c.unusedSince.Add(maxUnusedDuration).Before(now)
 }
 
-type reuseBase struct {
+type reuse struct {
 	mutex sync.Mutex
 
 	filters *filter.Filters
@@ -63,15 +64,15 @@ type reuseBase struct {
 	global map[int]*reuseConn
 }
 
-func newReuseBase(filters *filter.Filters) reuseBase {
-	return reuseBase{
+func newReuse(filters *filter.Filters) *reuse {
+	return &reuse{
 		filters: filters,
 		unicast: make(map[string]map[int]*reuseConn),
 		global:  make(map[int]*reuseConn),
 	}
 }
 
-func (r *reuseBase) runGarbageCollector() {
+func (r *reuse) runGarbageCollector() {
 	ticker := time.NewTicker(garbageCollectInterval)
 	defer ticker.Stop()
 
@@ -110,17 +111,37 @@ func (r *reuseBase) runGarbageCollector() {
 }
 
 // must be called while holding the mutex
-func (r *reuseBase) maybeStartGarbageCollector() {
+func (r *reuse) maybeStartGarbageCollector() {
 	if !r.garbageCollectorRunning {
 		r.garbageCollectorRunning = true
 		go r.runGarbageCollector()
 	}
 }
+func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
+	var ip *net.IP
+	if router, err := netroute.New(); err == nil {
+		_, _, src, err := router.Route(raddr.IP)
+		if err == nil && !src.IsUnspecified() {
+			ip = &src
+		}
+	}
 
-func (r *reuseBase) dialLocked(network string, raddr *net.UDPAddr, ips []net.IP) (*reuseConn, error) {
-	for _, ip := range ips {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	conn, err := r.dialLocked(network, raddr, ip)
+	if err != nil {
+		return nil, err
+	}
+	conn.IncreaseCount()
+	r.maybeStartGarbageCollector()
+	return conn, nil
+}
+
+func (r *reuse) dialLocked(network string, raddr *net.UDPAddr, source *net.IP) (*reuseConn, error) {
+	if source != nil {
 		// We already have at least one suitable connection...
-		if conns, ok := r.unicast[ip.String()]; ok {
+		if conns, ok := r.unicast[source.String()]; ok {
 			// ... we don't care which port we're dialing from. Just use the first.
 			for _, c := range conns {
 				return c, nil
@@ -152,7 +173,7 @@ func (r *reuseBase) dialLocked(network string, raddr *net.UDPAddr, ips []net.IP)
 	return rconn, nil
 }
 
-func (r *reuseBase) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
+func (r *reuse) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
 	conn, err := net.ListenUDP(network, laddr)
 	if err != nil {
 		return nil, err
