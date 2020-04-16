@@ -1,15 +1,10 @@
 package libp2pquic
 
 import (
-	"bufio"
-	"compress/gzip"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
-	"os"
-	"time"
 
 	"github.com/minio/sha256-simd"
 	"golang.org/x/crypto/hkdf"
@@ -134,8 +129,8 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, filters *filter.Filters) (tpt.Tr
 		serverConfig: config,
 		clientConfig: config.Clone(),
 	}
-	t.serverConfig.GetLogWriter = t.GetLogWriterFor("server")
-	t.clientConfig.GetLogWriter = t.GetLogWriterFor("client")
+	t.serverConfig.GetLogWriter = getLogWriterFor("server")
+	t.clientConfig.GetLogWriter = getLogWriterFor("client")
 	return t, nil
 }
 
@@ -193,29 +188,6 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		remotePeerID:    p,
 		remoteMultiaddr: remoteMultiaddr,
 	}, nil
-}
-
-func (t *transport) GetLogWriterFor(role string) func([]byte) io.WriteCloser {
-	qlogDir := os.Getenv("QLOGDIR")
-	if len(qlogDir) == 0 {
-		return nil
-	}
-	return func(connID []byte) io.WriteCloser {
-		// create the QLOGDIR, if it doesn't exist
-		if err := os.MkdirAll(qlogDir, 0777); err != nil {
-			log.Errorf("creating the QLOGDIR failed: %s", err)
-			return nil
-		}
-		t := time.Now().Format(time.RFC3339Nano)
-		filename := fmt.Sprintf("%s/log_%s_%s_%x.qlog.gz", qlogDir, t, role, connID)
-		f, err := os.Create(filename)
-		if err != nil {
-			log.Errorf("unable to create qlog file %s: %s", filename, err)
-			return nil
-		}
-		gz := gzip.NewWriter(f)
-		return newBufferedWriteCloser(bufio.NewWriter(gz), gz)
-	}
 }
 
 // Don't use mafmt.QUIC as we don't want to dial DNS addresses. Just /ip{4,6}/udp/quic
