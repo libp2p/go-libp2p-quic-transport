@@ -119,8 +119,8 @@ github.com/libp2p/go-openssl v0.0.4 h1:d27YZvLoTyMhIN4njrkr8zMDOM4lfpHIp6A+TK9fo
 github.com/libp2p/go-openssl v0.0.4/go.mod h1:unDrJpgy3oFr+rqXsarWifmJuNnJR4chtO1HmaZjggc=
 github.com/libp2p/go-sockaddr v0.0.2 h1:tCuXfpA9rq7llM/v834RKc/Xvovy/AqM9kHvTV/jY/Q=
 github.com/libp2p/go-sockaddr v0.0.2/go.mod h1:syPvOmNs24S3dFVGJA1/mrqdeijPxLV2Le3BRLKd68k=
-github.com/lucas-clemente/quic-go v0.15.3 h1:i6n4Jr7673z9TlurAjc87+GlE/BN10++r9XZIPS9j6I=
-github.com/lucas-clemente/quic-go v0.15.3/go.mod h1:oj40DjNLuNugvtXWg4PwaYgv7tAbzAabrT57CC69EhI=
+github.com/lucas-clemente/quic-go v0.15.4 h1:2dK8LiQz0xMJd//Jeev0EkdoGNwv48AVW0yoIj99Waw=
+github.com/lucas-clemente/quic-go v0.15.4/go.mod h1:oj40DjNLuNugvtXWg4PwaYgv7tAbzAabrT57CC69EhI=
 github.com/lunixbochs/vtclean v1.0.0/go.mod h1:pHhQNgMf3btfWnGBVipUOjRYhoOsdGqdm/+2c2E2WMI=
 github.com/mailru/easyjson v0.0.0-20190312143242-1de009706dbe/go.mod h1:C1wdFJiN94OJF2b5HbByQZoLdCWB1Yqtg26g4irojpc=
 github.com/marten-seemann/qpack v0.1.0/go.mod h1:LFt1NU/Ptjip0C2CPkhimBz5CGE3WGDAUWqna+CNTrI=
