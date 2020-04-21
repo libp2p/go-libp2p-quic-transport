@@ -16,7 +16,7 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fmt.Printf("Usage: ./main <port>")
+		fmt.Printf("Usage: %s <port>", os.Args[0])
 		return
 	}
 	if err := run(os.Args[1]); err != nil {

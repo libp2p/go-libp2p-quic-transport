@@ -16,7 +16,7 @@ import (
 
 func main() {
 	if len(os.Args) != 3 {
-		fmt.Printf("Usage: ./main <multiaddr> <peer id>")
+		fmt.Printf("Usage: %s <multiaddr> <peer id>", os.Args[0])
 		return
 	}
 	if err := run(os.Args[1], os.Args[2]); err != nil {
