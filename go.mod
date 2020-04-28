@@ -8,12 +8,12 @@ require (
 	github.com/libp2p/go-libp2p-tls v0.1.3
 	github.com/libp2p/go-maddr-filter v0.0.5
 	github.com/libp2p/go-netroute v0.1.2
-	github.com/lucas-clemente/quic-go v0.15.4
+	github.com/lucas-clemente/quic-go v0.15.5
 	github.com/minio/sha256-simd v0.1.1
 	github.com/multiformats/go-multiaddr v0.2.1
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
 	github.com/multiformats/go-multiaddr-net v0.1.4
 	github.com/onsi/ginkgo v1.12.0
 	github.com/onsi/gomega v1.9.0
-	golang.org/x/crypto v0.0.0-20200221231518-2aa609cf4a9d
+	golang.org/x/crypto v0.0.0-20200423211502-4bdfaf469ed5
 )
