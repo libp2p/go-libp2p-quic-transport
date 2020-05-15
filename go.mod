@@ -10,7 +10,7 @@ require (
 	github.com/libp2p/go-netroute v0.1.2
 	github.com/lucas-clemente/quic-go v0.15.7
 	github.com/minio/sha256-simd v0.1.1
-	github.com/multiformats/go-multiaddr v0.2.1
+	github.com/multiformats/go-multiaddr v0.2.2
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
 	github.com/multiformats/go-multiaddr-net v0.1.5
 	github.com/onsi/ginkgo v1.12.0
