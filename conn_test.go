@@ -11,16 +11,43 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/libp2p/go-libp2p-core/control"
 	ic "github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
-	filter "github.com/libp2p/go-maddr-filter"
+
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr-net"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+type localhostMockGater struct {
+	allowAll bool
+}
+
+func (c *localhostMockGater) InterceptAccept(addrs network.ConnMultiaddrs) bool {
+	return c.allowAll || !manet.IsIPLoopback(addrs.RemoteMultiaddr())
+}
+
+func (c *localhostMockGater) InterceptPeerDial(p peer.ID) (allow bool) {
+	return true
+}
+
+func (c *localhostMockGater) InterceptAddrDial(peer.ID, ma.Multiaddr) (allow bool) {
+	return true
+}
+
+func (c *localhostMockGater) InterceptSecured(network.Direction, peer.ID, network.ConnMultiaddrs) (allow bool) {
+	return true
+}
+
+func (c *localhostMockGater) InterceptUpgraded(network.Conn) (allow bool, reason control.DisconnectReason) {
+	return true, 0
+}
 
 var _ = Describe("Connection", func() {
 	var (
@@ -166,17 +193,12 @@ var _ = Describe("Connection", func() {
 	})
 
 	It("filters addresses", func() {
-		filters := filter.NewFilters()
-		ipNet := net.IPNet{
-			IP:   net.IPv4(127, 0, 0, 1),
-			Mask: net.IPv4Mask(255, 255, 255, 255),
-		}
-		filters.AddFilter(ipNet, filter.ActionDeny)
 		testMA, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/1234/quic")
 		Expect(err).ToNot(HaveOccurred())
-		Expect(filters.AddrBlocked(testMA)).To(BeTrue())
+		cg := &localhostMockGater{}
+		Expect(cg.InterceptAccept(&connAddrs{rmAddr: testMA})).To(BeFalse())
 
-		serverTransport, err := NewTransport(serverKey, nil, filters)
+		serverTransport, err := NewTransport(serverKey, nil, cg)
 		Expect(err).ToNot(HaveOccurred())
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
@@ -192,7 +214,7 @@ var _ = Describe("Connection", func() {
 
 		// now allow the address and make sure the connection goes through
 		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
-		filters.AddFilter(ipNet, filter.ActionAccept)
+		cg.allowAll = true
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
 		conn.Close()

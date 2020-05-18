@@ -3,17 +3,38 @@ package libp2pquic
 import (
 	"net"
 
-	filter "github.com/libp2p/go-maddr-filter"
+	"github.com/libp2p/go-libp2p-core/connmgr"
+
+	ma "github.com/multiformats/go-multiaddr"
 )
+
+type connAddrs struct {
+	lmAddr ma.Multiaddr
+	rmAddr ma.Multiaddr
+}
+
+func (c *connAddrs) LocalMultiaddr() ma.Multiaddr {
+	return c.lmAddr
+}
+
+func (c *connAddrs) RemoteMultiaddr() ma.Multiaddr {
+	return c.rmAddr
+}
 
 type filteredConn struct {
 	net.PacketConn
 
-	filters *filter.Filters
+	lmAddr    ma.Multiaddr
+	connGater connmgr.ConnectionGater
 }
 
-func newFilteredConn(c net.PacketConn, filters *filter.Filters) net.PacketConn {
-	return &filteredConn{PacketConn: c, filters: filters}
+func newFilteredConn(c net.PacketConn, connGater connmgr.ConnectionGater) net.PacketConn {
+	lmAddr, err := toQuicMultiaddr(c.LocalAddr())
+	if err != nil {
+		panic(err)
+	}
+
+	return &filteredConn{PacketConn: c, connGater: connGater, lmAddr: lmAddr}
 }
 
 func (c *filteredConn) ReadFrom(b []byte) (n int, addr net.Addr, rerr error) {
@@ -23,11 +44,14 @@ func (c *filteredConn) ReadFrom(b []byte) (n int, addr net.Addr, rerr error) {
 		if n < 1 || b[0]&0x80 == 0 {
 			return
 		}
-		maddr, err := toQuicMultiaddr(addr)
+		rmAddr, err := toQuicMultiaddr(addr)
 		if err != nil {
 			panic(err)
 		}
-		if !c.filters.AddrBlocked(maddr) {
+
+		connAddrs := &connAddrs{lmAddr: c.lmAddr, rmAddr: rmAddr}
+
+		if c.connGater.InterceptAccept(connAddrs) {
 			return
 		}
 	}
