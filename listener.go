@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	n "github.com/libp2p/go-libp2p-core/network"
 	"net"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
+	n "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
+
 	p2ptls "github.com/libp2p/go-libp2p-tls"
 
 	quic "github.com/lucas-clemente/quic-go"
