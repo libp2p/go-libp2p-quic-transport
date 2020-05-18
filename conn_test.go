@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	mrand "math/rand"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -26,10 +27,13 @@ import (
 )
 
 type localhostMockGater struct {
+	lk       sync.Mutex
 	allowAll bool
 }
 
 func (c *localhostMockGater) InterceptAccept(addrs network.ConnMultiaddrs) bool {
+	c.lk.Lock()
+	defer c.lk.Unlock()
 	return c.allowAll || !manet.IsIPLoopback(addrs.RemoteMultiaddr())
 }
 
@@ -214,7 +218,9 @@ var _ = Describe("Connection", func() {
 
 		// now allow the address and make sure the connection goes through
 		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
+		cg.lk.Lock()
 		cg.allowAll = true
+		cg.lk.Unlock()
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
 		conn.Close()
