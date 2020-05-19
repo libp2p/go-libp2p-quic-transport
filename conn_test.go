@@ -26,30 +26,33 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type localhostMockGater struct {
-	lk       sync.Mutex
-	allowAll bool
+type mockGater struct {
+	lk                 sync.Mutex
+	allowAllAccepted   bool
+	disableSecuredPeer peer.ID
 }
 
-func (c *localhostMockGater) InterceptAccept(addrs network.ConnMultiaddrs) bool {
+func (c *mockGater) InterceptAccept(addrs network.ConnMultiaddrs) bool {
 	c.lk.Lock()
 	defer c.lk.Unlock()
-	return c.allowAll || !manet.IsIPLoopback(addrs.RemoteMultiaddr())
+	return c.allowAllAccepted || !manet.IsIPLoopback(addrs.RemoteMultiaddr())
 }
 
-func (c *localhostMockGater) InterceptPeerDial(p peer.ID) (allow bool) {
+func (c *mockGater) InterceptPeerDial(p peer.ID) (allow bool) {
 	return true
 }
 
-func (c *localhostMockGater) InterceptAddrDial(peer.ID, ma.Multiaddr) (allow bool) {
+func (c *mockGater) InterceptAddrDial(peer.ID, ma.Multiaddr) (allow bool) {
 	return true
 }
 
-func (c *localhostMockGater) InterceptSecured(network.Direction, peer.ID, network.ConnMultiaddrs) (allow bool) {
-	return true
+func (c *mockGater) InterceptSecured(_ network.Direction, p peer.ID, _ network.ConnMultiaddrs) (allow bool) {
+	c.lk.Lock()
+	defer c.lk.Unlock()
+	return !(p == c.disableSecuredPeer)
 }
 
-func (c *localhostMockGater) InterceptUpgraded(network.Conn) (allow bool, reason control.DisconnectReason) {
+func (c *mockGater) InterceptUpgraded(network.Conn) (allow bool, reason control.DisconnectReason) {
 	return true, 0
 }
 
@@ -196,10 +199,10 @@ var _ = Describe("Connection", func() {
 		Eventually(done).Should(BeClosed())
 	})
 
-	It("filters addresses", func() {
+	It("gates accepted connections", func() {
 		testMA, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/1234/quic")
 		Expect(err).ToNot(HaveOccurred())
-		cg := &localhostMockGater{}
+		cg := &mockGater{}
 		Expect(cg.InterceptAccept(&connAddrs{rmAddr: testMA})).To(BeFalse())
 
 		serverTransport, err := NewTransport(serverKey, nil, cg)
@@ -219,7 +222,32 @@ var _ = Describe("Connection", func() {
 		// now allow the address and make sure the connection goes through
 		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
 		cg.lk.Lock()
-		cg.allowAll = true
+		cg.allowAllAccepted = true
+		cg.lk.Unlock()
+		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
+		Expect(err).ToNot(HaveOccurred())
+		conn.Close()
+	})
+
+	It("gates secured connections", func() {
+		serverTransport, err := NewTransport(serverKey, nil, nil)
+		Expect(err).ToNot(HaveOccurred())
+		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
+		defer ln.Close()
+
+		cg := &mockGater{allowAllAccepted: true, disableSecuredPeer: serverID}
+		clientTransport, err := NewTransport(clientKey, nil, cg)
+		Expect(err).ToNot(HaveOccurred())
+
+		// make sure that connection attempts fails
+		clientTransport.(*transport).clientConfig.HandshakeTimeout = 250 * time.Millisecond
+		_, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
+		Expect(err).To(HaveOccurred())
+
+		// now allow the peerId and make sure the connection goes through
+		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
+		cg.lk.Lock()
+		cg.disableSecuredPeer = "random"
 		cg.lk.Unlock()
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
