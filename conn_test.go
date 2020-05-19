@@ -27,15 +27,15 @@ import (
 )
 
 type mockGater struct {
-	lk                 sync.Mutex
-	allowAllAccepted   bool
-	disableSecuredPeer peer.ID
+	lk          sync.Mutex
+	acceptAll   bool
+	blockedPeer peer.ID
 }
 
 func (c *mockGater) InterceptAccept(addrs network.ConnMultiaddrs) bool {
 	c.lk.Lock()
 	defer c.lk.Unlock()
-	return c.allowAllAccepted || !manet.IsIPLoopback(addrs.RemoteMultiaddr())
+	return c.acceptAll || !manet.IsIPLoopback(addrs.RemoteMultiaddr())
 }
 
 func (c *mockGater) InterceptPeerDial(p peer.ID) (allow bool) {
@@ -49,7 +49,7 @@ func (c *mockGater) InterceptAddrDial(peer.ID, ma.Multiaddr) (allow bool) {
 func (c *mockGater) InterceptSecured(_ network.Direction, p peer.ID, _ network.ConnMultiaddrs) (allow bool) {
 	c.lk.Lock()
 	defer c.lk.Unlock()
-	return !(p == c.disableSecuredPeer)
+	return !(p == c.blockedPeer)
 }
 
 func (c *mockGater) InterceptUpgraded(network.Conn) (allow bool, reason control.DisconnectReason) {
@@ -222,7 +222,7 @@ var _ = Describe("Connection", func() {
 		// now allow the address and make sure the connection goes through
 		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
 		cg.lk.Lock()
-		cg.allowAllAccepted = true
+		cg.acceptAll = true
 		cg.lk.Unlock()
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
@@ -235,7 +235,7 @@ var _ = Describe("Connection", func() {
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
 
-		cg := &mockGater{allowAllAccepted: true, disableSecuredPeer: serverID}
+		cg := &mockGater{acceptAll: true, blockedPeer: serverID}
 		clientTransport, err := NewTransport(clientKey, nil, cg)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -247,7 +247,7 @@ var _ = Describe("Connection", func() {
 		// now allow the peerId and make sure the connection goes through
 		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
 		cg.lk.Lock()
-		cg.disableSecuredPeer = "random"
+		cg.blockedPeer = "none"
 		cg.lk.Unlock()
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
