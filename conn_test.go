@@ -8,19 +8,53 @@ import (
 	"io/ioutil"
 	mrand "math/rand"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/libp2p/go-libp2p-core/control"
 	ic "github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
-	filter "github.com/libp2p/go-maddr-filter"
+
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr-net"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+type mockGater struct {
+	lk          sync.Mutex
+	acceptAll   bool
+	blockedPeer peer.ID
+}
+
+func (c *mockGater) InterceptAccept(addrs network.ConnMultiaddrs) bool {
+	c.lk.Lock()
+	defer c.lk.Unlock()
+	return c.acceptAll || !manet.IsIPLoopback(addrs.RemoteMultiaddr())
+}
+
+func (c *mockGater) InterceptPeerDial(p peer.ID) (allow bool) {
+	return true
+}
+
+func (c *mockGater) InterceptAddrDial(peer.ID, ma.Multiaddr) (allow bool) {
+	return true
+}
+
+func (c *mockGater) InterceptSecured(_ network.Direction, p peer.ID, _ network.ConnMultiaddrs) (allow bool) {
+	c.lk.Lock()
+	defer c.lk.Unlock()
+	return !(p == c.blockedPeer)
+}
+
+func (c *mockGater) InterceptUpgraded(network.Conn) (allow bool, reason control.DisconnectReason) {
+	return true, 0
+}
 
 var _ = Describe("Connection", func() {
 	var (
@@ -165,18 +199,13 @@ var _ = Describe("Connection", func() {
 		Eventually(done).Should(BeClosed())
 	})
 
-	It("filters addresses", func() {
-		filters := filter.NewFilters()
-		ipNet := net.IPNet{
-			IP:   net.IPv4(127, 0, 0, 1),
-			Mask: net.IPv4Mask(255, 255, 255, 255),
-		}
-		filters.AddFilter(ipNet, filter.ActionDeny)
+	It("gates accepted connections", func() {
 		testMA, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/1234/quic")
 		Expect(err).ToNot(HaveOccurred())
-		Expect(filters.AddrBlocked(testMA)).To(BeTrue())
+		cg := &mockGater{}
+		Expect(cg.InterceptAccept(&connAddrs{rmAddr: testMA})).To(BeFalse())
 
-		serverTransport, err := NewTransport(serverKey, nil, filters)
+		serverTransport, err := NewTransport(serverKey, nil, cg)
 		Expect(err).ToNot(HaveOccurred())
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
@@ -192,7 +221,34 @@ var _ = Describe("Connection", func() {
 
 		// now allow the address and make sure the connection goes through
 		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
-		filters.AddFilter(ipNet, filter.ActionAccept)
+		cg.lk.Lock()
+		cg.acceptAll = true
+		cg.lk.Unlock()
+		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
+		Expect(err).ToNot(HaveOccurred())
+		conn.Close()
+	})
+
+	It("gates secured connections", func() {
+		serverTransport, err := NewTransport(serverKey, nil, nil)
+		Expect(err).ToNot(HaveOccurred())
+		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
+		defer ln.Close()
+
+		cg := &mockGater{acceptAll: true, blockedPeer: serverID}
+		clientTransport, err := NewTransport(clientKey, nil, cg)
+		Expect(err).ToNot(HaveOccurred())
+
+		// make sure that connection attempts fails
+		clientTransport.(*transport).clientConfig.HandshakeTimeout = 250 * time.Millisecond
+		_, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
+		Expect(err).To(HaveOccurred())
+
+		// now allow the peerId and make sure the connection goes through
+		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
+		cg.lk.Lock()
+		cg.blockedPeer = "none"
+		cg.lk.Unlock()
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
 		conn.Close()

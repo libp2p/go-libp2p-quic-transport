@@ -3,11 +3,14 @@ package libp2pquic
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
+	n "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
+
 	p2ptls "github.com/libp2p/go-libp2p-tls"
 
 	quic "github.com/lucas-clemente/quic-go"
@@ -79,6 +82,7 @@ func (l *listener) setupConn(sess quic.Session) (tpt.CapableConn, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	remotePeerID, err := peer.IDFromPublicKey(remotePubKey)
 	if err != nil {
 		return nil, err
@@ -87,6 +91,12 @@ func (l *listener) setupConn(sess quic.Session) (tpt.CapableConn, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	connaddrs := &connAddrs{lmAddr: l.localMultiaddr, rmAddr: remoteMultiaddr}
+	if l.transport.gater != nil && !l.transport.gater.InterceptSecured(n.DirInbound, remotePeerID, connaddrs) {
+		return nil, fmt.Errorf("secured connection gated")
+	}
+
 	return &conn{
 		sess:            sess,
 		transport:       l.transport,

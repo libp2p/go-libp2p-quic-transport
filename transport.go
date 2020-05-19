@@ -3,8 +3,12 @@ package libp2pquic
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
+
+	"github.com/libp2p/go-libp2p-core/connmgr"
+	n "github.com/libp2p/go-libp2p-core/network"
 
 	"github.com/minio/sha256-simd"
 	"golang.org/x/crypto/hkdf"
@@ -15,7 +19,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/pnet"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
 	p2ptls "github.com/libp2p/go-libp2p-tls"
-	filter "github.com/libp2p/go-maddr-filter"
 	quic "github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
 	mafmt "github.com/multiformats/go-multiaddr-fmt"
@@ -43,9 +46,9 @@ type connManager struct {
 	reuseUDP6 *reuse
 }
 
-func newConnManager(filters *filter.Filters) (*connManager, error) {
-	reuseUDP4 := newReuse(filters)
-	reuseUDP6 := newReuse(filters)
+func newConnManager(gater connmgr.ConnectionGater) (*connManager, error) {
+	reuseUDP4 := newReuse(gater)
+	reuseUDP6 := newReuse(gater)
 
 	return &connManager{
 		reuseUDP4: reuseUDP4,
@@ -88,12 +91,13 @@ type transport struct {
 	connManager  *connManager
 	serverConfig *quic.Config
 	clientConfig *quic.Config
+	gater        connmgr.ConnectionGater
 }
 
 var _ tpt.Transport = &transport{}
 
 // NewTransport creates a new QUIC transport
-func NewTransport(key ic.PrivKey, psk pnet.PSK, filters *filter.Filters) (tpt.Transport, error) {
+func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (tpt.Transport, error) {
 	if len(psk) > 0 {
 		log.Error("QUIC doesn't support private networks yet.")
 		return nil, errors.New("QUIC doesn't support private networks yet")
@@ -106,7 +110,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, filters *filter.Filters) (tpt.Tr
 	if err != nil {
 		return nil, err
 	}
-	connManager, err := newConnManager(filters)
+	connManager, err := newConnManager(gater)
 	if err != nil {
 		return nil, err
 	}
@@ -128,6 +132,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, filters *filter.Filters) (tpt.Tr
 		connManager:  connManager,
 		serverConfig: config,
 		clientConfig: config.Clone(),
+		gater:        gater,
 	}
 	t.serverConfig.GetLogWriter = getLogWriterFor("server")
 	t.clientConfig.GetLogWriter = getLogWriterFor("client")
@@ -178,6 +183,13 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		pconn.DecreaseCount()
 		return nil, err
 	}
+
+	connaddrs := &connAddrs{lmAddr: localMultiaddr, rmAddr: remoteMultiaddr}
+	if t.gater != nil && !t.gater.InterceptSecured(n.DirOutbound, p, connaddrs) {
+		pconn.DecreaseCount()
+		return nil, fmt.Errorf("secured connection gated")
+	}
+
 	return &conn{
 		sess:            sess,
 		transport:       t,
