@@ -6,7 +6,6 @@ require (
 	github.com/ipfs/go-log v1.0.4
 	github.com/libp2p/go-libp2p-core v0.5.5
 	github.com/libp2p/go-libp2p-tls v0.1.3
-	github.com/libp2p/go-maddr-filter v0.0.5
 	github.com/libp2p/go-netroute v0.1.2
 	github.com/lucas-clemente/quic-go v0.15.7
 	github.com/minio/sha256-simd v0.1.1
