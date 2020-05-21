@@ -49,7 +49,7 @@ func (c *mockGater) InterceptAddrDial(peer.ID, ma.Multiaddr) (allow bool) {
 func (c *mockGater) InterceptSecured(_ network.Direction, p peer.ID, _ network.ConnMultiaddrs) (allow bool) {
 	c.lk.Lock()
 	defer c.lk.Unlock()
-	return !(p == c.blockedPeer)
+	return p != c.blockedPeer
 }
 
 func (c *mockGater) InterceptUpgraded(network.Conn) (allow bool, reason control.DisconnectReason) {
