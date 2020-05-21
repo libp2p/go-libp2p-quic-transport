@@ -2,27 +2,31 @@ package libp2pquic
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 
-	"github.com/libp2p/go-libp2p-core/connmgr"
-	n "github.com/libp2p/go-libp2p-core/network"
-
-	"github.com/minio/sha256-simd"
 	"golang.org/x/crypto/hkdf"
 
-	logging "github.com/ipfs/go-log"
+	"github.com/libp2p/go-libp2p-core/connmgr"
 	ic "github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/pnet"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
+
 	p2ptls "github.com/libp2p/go-libp2p-tls"
-	quic "github.com/lucas-clemente/quic-go"
+
 	ma "github.com/multiformats/go-multiaddr"
 	mafmt "github.com/multiformats/go-multiaddr-fmt"
 	manet "github.com/multiformats/go-multiaddr-net"
+
+	logging "github.com/ipfs/go-log"
+
+	"github.com/lucas-clemente/quic-go"
+	"github.com/minio/sha256-simd"
 )
 
 var log = logging.Logger("quic-transport")
@@ -141,28 +145,55 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 
 // Dial dials a new QUIC connection
 func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tpt.CapableConn, error) {
-	network, host, err := manet.DialArgs(raddr)
+	netwrk, host, err := manet.DialArgs(raddr)
 	if err != nil {
 		return nil, err
 	}
-	addr, err := net.ResolveUDPAddr(network, host)
+
+	addr, err := net.ResolveUDPAddr(netwrk, host)
 	if err != nil {
 		return nil, err
 	}
+
 	remoteMultiaddr, err := toQuicMultiaddr(addr)
 	if err != nil {
 		return nil, err
 	}
-	tlsConf, keyCh := t.identity.ConfigForPeer(p)
-	pconn, err := t.connManager.Dial(network, addr)
+
+	pconn, err := t.connManager.Dial(netwrk, addr)
 	if err != nil {
 		return nil, err
 	}
+
+	localMultiaddr, err := toQuicMultiaddr(pconn.LocalAddr())
+	if err != nil {
+		pconn.DecreaseCount()
+		return nil, err
+	}
+
+	connaddrs := &connAddrs{lmAddr: localMultiaddr, rmAddr: remoteMultiaddr}
+
+	tlsConf, keyCh := t.identity.ConfigForPeer(p)
+	vpc := tlsConf.VerifyPeerCertificate
+	tlsConf.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+		// delegate to the original peer certificate verification function.
+		if err := vpc(rawCerts, verifiedChains); err != nil {
+			return err
+		}
+
+		if t.gater != nil && !t.gater.InterceptSecured(network.DirOutbound, p, connaddrs) {
+			return fmt.Errorf("gater denied secured connection to peer: %s", p.Pretty())
+		}
+		return nil
+	}
+
+	// now perform the QUIC dial.
 	sess, err := quic.DialContext(ctx, pconn, addr, host, tlsConf, t.clientConfig)
 	if err != nil {
 		pconn.DecreaseCount()
 		return nil, err
 	}
+
 	// Should be ready by this point, don't block.
 	var remotePubKey ic.PubKey
 	select {
@@ -177,18 +208,6 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		<-sess.Context().Done()
 		pconn.DecreaseCount()
 	}()
-
-	localMultiaddr, err := toQuicMultiaddr(pconn.LocalAddr())
-	if err != nil {
-		pconn.DecreaseCount()
-		return nil, err
-	}
-
-	connaddrs := &connAddrs{lmAddr: localMultiaddr, rmAddr: remoteMultiaddr}
-	if t.gater != nil && !t.gater.InterceptSecured(n.DirOutbound, p, connaddrs) {
-		pconn.DecreaseCount()
-		return nil, fmt.Errorf("secured connection gated")
-	}
 
 	return &conn{
 		sess:            sess,
