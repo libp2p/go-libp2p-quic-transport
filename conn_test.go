@@ -20,22 +20,20 @@ import (
 
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr-net"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 type mockGater struct {
 	lk          sync.Mutex
-	acceptAll   bool
+	blockAccept bool
 	blockedPeer peer.ID
 }
 
-func (c *mockGater) InterceptAccept(addrs network.ConnMultiaddrs) bool {
+func (c *mockGater) InterceptAccept(_ network.ConnMultiaddrs) (allow bool) {
 	c.lk.Lock()
 	defer c.lk.Unlock()
-	return c.acceptAll || !manet.IsIPLoopback(addrs.RemoteMultiaddr())
+	return !c.blockAccept
 }
 
 func (c *mockGater) InterceptPeerDial(p peer.ID) (allow bool) {
@@ -199,10 +197,10 @@ var _ = Describe("Connection", func() {
 		Eventually(done).Should(BeClosed())
 	})
 
-	It("gates accepted connections", func() {
+	It("gates allows/denies connections on accept", func() {
 		testMA, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/1234/quic")
 		Expect(err).ToNot(HaveOccurred())
-		cg := &mockGater{}
+		cg := &mockGater{blockAccept: true}
 		Expect(cg.InterceptAccept(&connAddrs{rmAddr: testMA})).To(BeFalse())
 
 		serverTransport, err := NewTransport(serverKey, nil, cg)
@@ -222,8 +220,9 @@ var _ = Describe("Connection", func() {
 		// now allow the address and make sure the connection goes through
 		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
 		cg.lk.Lock()
-		cg.acceptAll = true
+		cg.blockAccept = false
 		cg.lk.Unlock()
+
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
 		conn.Close()
@@ -235,7 +234,7 @@ var _ = Describe("Connection", func() {
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
 
-		cg := &mockGater{acceptAll: true, blockedPeer: serverID}
+		cg := &mockGater{blockedPeer: serverID}
 		clientTransport, err := NewTransport(clientKey, nil, cg)
 		Expect(err).ToNot(HaveOccurred())
 

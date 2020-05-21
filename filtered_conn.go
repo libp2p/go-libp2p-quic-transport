@@ -50,8 +50,7 @@ func (c *filteredConn) ReadFrom(b []byte) (n int, addr net.Addr, rerr error) {
 		}
 
 		connAddrs := &connAddrs{lmAddr: c.lmAddr, rmAddr: rmAddr}
-
-		if c.gater.InterceptAccept(connAddrs) {
+		if c.gater != nil && c.gater.InterceptAccept(connAddrs) {
 			return
 		}
 	}
