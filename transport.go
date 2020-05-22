@@ -180,13 +180,13 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 
 	localMultiaddr, err := toQuicMultiaddr(pconn.LocalAddr())
 	if err != nil {
-		pconn.DecreaseCount()
+		sess.CloseWithError(0, "")
 		return nil, err
 	}
 
 	connaddrs := &connAddrs{lmAddr: localMultiaddr, rmAddr: remoteMultiaddr}
 	if t.gater != nil && !t.gater.InterceptSecured(n.DirOutbound, p, connaddrs) {
-		pconn.DecreaseCount()
+		sess.CloseWithError(0, "")
 		return nil, fmt.Errorf("secured connection gated")
 	}
 
