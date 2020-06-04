@@ -338,7 +338,18 @@ var _ = Describe("Connection", func() {
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := clientTransport.Dial(context.Background(), proxyAddr, serverID)
 		Expect(err).ToNot(HaveOccurred())
-		str, err := conn.OpenStream()
+		go func() {
+			defer GinkgoRecover()
+			conn, err := ln.Accept()
+			Expect(err).ToNot(HaveOccurred())
+			str, err := conn.OpenStream()
+			Expect(err).ToNot(HaveOccurred())
+			str.Write([]byte("foobar"))
+		}()
+
+		str, err := conn.AcceptStream()
+		Expect(err).ToNot(HaveOccurred())
+		_, err = str.Read(make([]byte, 6))
 		Expect(err).ToNot(HaveOccurred())
 
 		// Stop forwarding packets and close the server.
@@ -351,9 +362,10 @@ var _ = Describe("Connection", func() {
 		// Now that the new server is up, re-enable packet forwarding.
 		atomic.StoreUint32(&drop, 0)
 
+		// Trigger something (not too small) to be sent, so that we receive the stateless reset.
 		// The new server doesn't have any state for the previously established connection.
 		// We expect it to send a stateless reset.
-		_, rerr := str.Write([]byte("foobar"))
+		_, rerr := str.Write([]byte("Lorem ipsum dolor sit amet."))
 		if rerr == nil {
 			_, rerr = str.Read([]byte{0, 0})
 		}
