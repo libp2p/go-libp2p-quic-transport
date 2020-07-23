@@ -1,6 +1,6 @@
 module github.com/libp2p/go-libp2p-quic-transport
 
-go 1.13
+go 1.14
 
 require (
 	github.com/ipfs/go-log v1.0.4
