@@ -124,8 +124,9 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 	if _, err := io.ReadFull(keyReader, config.StatelessResetKey); err != nil {
 		return nil, err
 	}
+	config.Tracer = tracer
 
-	t := &transport{
+	return &transport{
 		privKey:      key,
 		localPeer:    localPeer,
 		identity:     identity,
@@ -133,10 +134,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 		serverConfig: config,
 		clientConfig: config.Clone(),
 		gater:        gater,
-	}
-	t.serverConfig.GetLogWriter = getLogWriterFor("server")
-	t.clientConfig.GetLogWriter = getLogWriterFor("client")
-	return t, nil
+	}, nil
 }
 
 // Dial dials a new QUIC connection
