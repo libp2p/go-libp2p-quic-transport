@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/lucas-clemente/quic-go/logging"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -16,18 +18,18 @@ type nopCloser struct{}
 func (nopCloser) Close() error { return nil }
 
 var _ = Describe("qlogger", func() {
-	var origQlogDir string
+	var qlogDir string
 
 	BeforeEach(func() {
-		origQlogDir = qlogDir
-		d, err := ioutil.TempDir("", "libp2p-quic-transport-test")
+		var err error
+		qlogDir, err = ioutil.TempDir("", "libp2p-quic-transport-test")
 		Expect(err).ToNot(HaveOccurred())
-		fmt.Fprintf(GinkgoWriter, "Creating temporary directory: %s\n", d)
-		qlogDir = d
+		fmt.Fprintf(GinkgoWriter, "Creating temporary directory: %s\n", qlogDir)
+		initQlogger(qlogDir)
 	})
 
 	AfterEach(func() {
-		qlogDir = origQlogDir
+		Expect(os.RemoveAll(qlogDir)).To(Succeed())
 	})
 
 	getFile := func() os.FileInfo {
@@ -38,7 +40,7 @@ var _ = Describe("qlogger", func() {
 	}
 
 	It("saves a qlog", func() {
-		logger := newQlogger("server", []byte{0xde, 0xad, 0xbe, 0xef})
+		logger := newQlogger(qlogDir, logging.PerspectiveServer, []byte{0xde, 0xad, 0xbe, 0xef})
 		file := getFile()
 		Expect(string(file.Name()[0])).To(Equal("."))
 		Expect(file.Name()).To(HaveSuffix(".qlog.gz.swp"))
@@ -54,7 +56,7 @@ var _ = Describe("qlogger", func() {
 	})
 
 	It("buffers", func() {
-		logger := newQlogger("server", []byte("connid"))
+		logger := newQlogger(qlogDir, logging.PerspectiveServer, []byte("connid"))
 		initialSize := getFile().Size()
 		// Do a small write.
 		// Since the writter is buffered, this should not be written to disk yet.
@@ -68,7 +70,7 @@ var _ = Describe("qlogger", func() {
 	})
 
 	It("compresses", func() {
-		logger := newQlogger("server", []byte("connid"))
+		logger := newQlogger(qlogDir, logging.PerspectiveServer, []byte("connid"))
 		logger.Write([]byte("foobar"))
 		Expect(logger.Close()).To(Succeed())
 		compressed, err := ioutil.ReadFile(qlogDir + "/" + getFile().Name())

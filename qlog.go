@@ -7,26 +7,30 @@ import (
 	"io"
 	"os"
 	"time"
+
+	"github.com/lucas-clemente/quic-go/logging"
+	"github.com/lucas-clemente/quic-go/qlog"
 )
 
-var qlogDir string
+var tracer logging.Tracer
 
 func init() {
-	qlogDir = os.Getenv("QLOGDIR")
+	qlogDir := os.Getenv("QLOGDIR")
+	if len(qlogDir) == 0 {
+		return
+	}
+	initQlogger(qlogDir)
 }
 
-func getLogWriterFor(role string) func([]byte) io.WriteCloser {
-	if len(qlogDir) == 0 {
-		return nil
-	}
-	return func(connID []byte) io.WriteCloser {
+func initQlogger(qlogDir string) {
+	tracer = qlog.NewTracer(func(role logging.Perspective, connID []byte) io.WriteCloser {
 		// create the QLOGDIR, if it doesn't exist
 		if err := os.MkdirAll(qlogDir, 0777); err != nil {
 			log.Errorf("creating the QLOGDIR failed: %s", err)
 			return nil
 		}
-		return newQlogger(role, connID)
-	}
+		return newQlogger(qlogDir, role, connID)
+	})
 }
 
 type qlogger struct {
@@ -35,10 +39,14 @@ type qlogger struct {
 	io.WriteCloser
 }
 
-func newQlogger(role string, connID []byte) io.WriteCloser {
+func newQlogger(qlogDir string, role logging.Perspective, connID []byte) io.WriteCloser {
 	t := time.Now().UTC().Format("2006-01-02T15-04-05.999999999UTC")
-	finalFilename := fmt.Sprintf("%s%clog_%s_%s_%x.qlog.gz", qlogDir, os.PathSeparator, t, role, connID)
-	filename := fmt.Sprintf("%s%c.log_%s_%s_%x.qlog.gz.swp", qlogDir, os.PathSeparator, t, role, connID)
+	r := "server"
+	if role == logging.PerspectiveClient {
+		r = "client"
+	}
+	finalFilename := fmt.Sprintf("%s%clog_%s_%s_%x.qlog.gz", qlogDir, os.PathSeparator, t, r, connID)
+	filename := fmt.Sprintf("%s%c.log_%s_%s_%x.qlog.gz.swp", qlogDir, os.PathSeparator, t, r, connID)
 	f, err := os.Create(filename)
 	if err != nil {
 		log.Errorf("unable to create qlog file %s: %s", filename, err)
