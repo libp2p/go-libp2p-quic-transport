@@ -28,6 +28,10 @@ var _ = Describe("qlogger", func() {
 		initQlogger(qlogDir)
 	})
 
+	AfterEach(func() {
+		Expect(os.RemoveAll(qlogDir)).To(Succeed())
+	})
+
 	getFile := func() os.FileInfo {
 		files, err := ioutil.ReadDir(qlogDir)
 		Expect(err).ToNot(HaveOccurred())
