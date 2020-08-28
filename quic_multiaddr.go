@@ -4,7 +4,7 @@ import (
 	"net"
 
 	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr-net"
+	manet "github.com/multiformats/go-multiaddr/net"
 )
 
 var quicMA ma.Multiaddr
