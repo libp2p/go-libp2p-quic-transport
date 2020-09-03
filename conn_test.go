@@ -20,7 +20,7 @@ import (
 
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr-net"
+	manet "github.com/multiformats/go-multiaddr/net"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -303,7 +303,7 @@ var _ = Describe("Connection", func() {
 				defer GinkgoRecover()
 				str, err := conn.AcceptStream()
 				Expect(err).ToNot(HaveOccurred())
-				str.Close()
+				str.CloseWrite()
 				d, err := ioutil.ReadAll(str)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(d).To(Equal(data))

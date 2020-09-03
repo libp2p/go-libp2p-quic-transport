@@ -38,4 +38,18 @@ func (s *stream) Reset() error {
 	return nil
 }
 
+func (s *stream) Close() error {
+	s.Stream.CancelRead(reset)
+	return s.Stream.Close()
+}
+
+func (s *stream) CloseRead() error {
+	s.Stream.CancelRead(reset)
+	return nil
+}
+
+func (s *stream) CloseWrite() error {
+	return s.Stream.Close()
+}
+
 var _ mux.MuxedStream = &stream{}
