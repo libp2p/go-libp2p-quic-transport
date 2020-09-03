@@ -50,12 +50,18 @@ jobs:
         with:
           go-version: ${{ matrix.cfg.go }}
       - run: go version
-      - name: build transport
+      - name: Build transport
         run: |
-          mkdir builder && cp integrationtests/main.go builder/
+          cp -r integrationtests builder
           git checkout ${{ matrix.cfg.commit }}
+          rm -rf integrationtests || true
+          mv builder integrationtests
           git reflog --decorate -1
-          go build -o transport-go${{ matrix.cfg.go }}-${{ matrix.cfg.commit }} builder/main.go
+          if [[ `git merge-base --is-ancestor HEAD 126c64772ba0aef0b2b6d58ff36e55a93f9253a7; echo $?` == "1" ]]; then
+            go build -o transport-go${{ matrix.cfg.go }}-${{ matrix.cfg.commit }} integrationtests/main.go
+          else
+            go build -tags oldstream -o transport-go${{ matrix.cfg.go }}-${{ matrix.cfg.commit }} integrationtests/main.go
+          fi
       - name: Upload binary
         uses: actions/upload-artifact@v2
         with:

@@ -15,6 +15,8 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	libp2pquic "github.com/libp2p/go-libp2p-quic-transport"
 	ma "github.com/multiformats/go-multiaddr"
+
+	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/stream"
 )
 
 func main() {
@@ -95,10 +97,11 @@ func runServer(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr)
 		return fmt.Errorf("remote Peer ID mismatch. Got %s, expected %s", conn.RemotePeer().Pretty(), clientPeerID.Pretty())
 	}
 	for {
-		str, err := conn.AcceptStream()
+		st, err := conn.AcceptStream()
 		if err != nil {
 			return nil
 		}
+		str := stream.WrapStream(st)
 		defer str.Close()
 		data, err := ioutil.ReadAll(str)
 		if err != nil {
@@ -107,7 +110,7 @@ func runServer(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr)
 		if _, err := str.Write(data); err != nil {
 			return err
 		}
-		if err := str.Close(); err != nil {
+		if err := str.CloseWrite(); err != nil {
 			return err
 		}
 	}
@@ -135,16 +138,17 @@ func runClient(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr)
 	if conn.RemotePeer() != serverPeerID {
 		return fmt.Errorf("remote Peer ID mismatch. Got %s, expected %s", conn.RemotePeer().Pretty(), serverPeerID.Pretty())
 	}
-	str, err := conn.OpenStream()
+	st, err := conn.OpenStream()
 	if err != nil {
 		return err
 	}
+	str := stream.WrapStream(st)
 	data := make([]byte, 1<<15)
 	rand.Read(data)
 	if _, err := str.Write(data); err != nil {
 		return err
 	}
-	if err := str.Close(); err != nil {
+	if err := str.CloseWrite(); err != nil {
 		return err
 	}
 	echoed, err := ioutil.ReadAll(str)
