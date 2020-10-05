@@ -48,6 +48,7 @@ func run(raddr string, p string) error {
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 	str, err := conn.OpenStream()
 	if err != nil {
 		return err
@@ -65,5 +66,5 @@ func run(raddr string, p string) error {
 		return err
 	}
 	log.Printf("Received: %s\n", data)
-	return conn.Close()
+	return nil
 }
