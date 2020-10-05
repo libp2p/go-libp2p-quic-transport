@@ -14,6 +14,7 @@ import (
 	p2ptls "github.com/libp2p/go-libp2p-tls"
 
 	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/qlog"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
@@ -39,7 +40,12 @@ func newListener(rconn *reuseConn, t *transport, localPeer peer.ID, key ic.PrivK
 		conf, _ := identity.ConfigForAny()
 		return conf, nil
 	}
-	ln, err := quic.Listen(rconn, &tlsConf, t.serverConfig)
+	conf := quicConfig.Clone()
+	conf.StatelessResetKey = t.statelessResetKey[:]
+	conf.Tracer = getTracer(func(tr qlog.ConnectionTracer) {
+		tr.LogExternalEvent(&connectionStartEvent{local: t.localPeer})
+	})
+	ln, err := quic.Listen(rconn, &tlsConf, conf)
 	if err != nil {
 		return nil, err
 	}

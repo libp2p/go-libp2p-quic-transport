@@ -8,25 +8,52 @@ import (
 	"os"
 	"time"
 
+	"github.com/francoispqt/gojay"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/lucas-clemente/quic-go/logging"
 	"github.com/lucas-clemente/quic-go/metrics"
 	"github.com/lucas-clemente/quic-go/qlog"
 )
 
-var tracer logging.Tracer
+var metricsTracer logging.Tracer
+var qlogDir string
 
 func init() {
-	tracers := []logging.Tracer{metrics.NewTracer()}
-	if qlogDir := os.Getenv("QLOGDIR"); len(qlogDir) > 0 {
-		if qlogger := initQlogger(qlogDir); qlogger != nil {
-			tracers = append(tracers, qlogger)
-		}
-	}
-	tracer = logging.NewMultiplexedTracer(tracers...)
+	metricsTracer = metrics.NewTracer()
+	qlogDir = os.Getenv("QLOGDIR")
 }
 
-func initQlogger(qlogDir string) logging.Tracer {
-	return qlog.NewTracer(func(role logging.Perspective, connID []byte) io.WriteCloser {
+func getTracer(qlogCallback func(qlog.ConnectionTracer)) logging.Tracer {
+	var tracers []logging.Tracer
+	if qlogger := maybeGetQlogger(qlogCallback); qlogger != nil {
+		tracers = append(tracers, qlogger)
+	}
+	return logging.NewMultiplexedTracer(tracers...)
+}
+
+func maybeGetQlogger(qlogCallback func(qlog.ConnectionTracer)) logging.Tracer {
+	if len(qlogDir) == 0 {
+		return nil
+	}
+	return initQlogger(qlogDir, qlogCallback)
+}
+
+type qlogTracer struct {
+	logging.Tracer
+
+	cb func(qlog.ConnectionTracer)
+}
+
+func (t *qlogTracer) TracerForConnection(p logging.Perspective, odcid logging.ConnectionID) logging.ConnectionTracer {
+	ct := t.Tracer.TracerForConnection(p, odcid)
+	if ct != nil {
+		t.cb(ct.(qlog.ConnectionTracer))
+	}
+	return ct
+}
+
+func initQlogger(qlogDir string, qlogCallback func(qlog.ConnectionTracer)) logging.Tracer {
+	tracer := qlog.NewTracer(func(role logging.Perspective, connID []byte) io.WriteCloser {
 		// create the QLOGDIR, if it doesn't exist
 		if err := os.MkdirAll(qlogDir, 0777); err != nil {
 			log.Errorf("creating the QLOGDIR failed: %s", err)
@@ -34,9 +61,32 @@ func initQlogger(qlogDir string) logging.Tracer {
 		}
 		return newQlogger(qlogDir, role, connID)
 	})
+	if tracer != nil {
+		tracer = &qlogTracer{Tracer: tracer, cb: qlogCallback}
+	}
+	return tracer
 }
 
-type qlogger struct {
+type connectionStartEvent struct {
+	local, remote peer.ID
+}
+
+var _ qlog.ExternalEvent = &connectionStartEvent{}
+
+func (e *connectionStartEvent) Name() string     { return "connection_start" }
+func (e *connectionStartEvent) Category() string { return "libp2p" }
+func (e *connectionStartEvent) IsNil() bool      { return e == nil }
+func (e *connectionStartEvent) MarshalJSONObject(enc *gojay.Encoder) {
+	fmt.Println("Marshal", e.local, len(e.local))
+	if len(e.local) > 0 {
+		enc.StringKey("local", e.local.Pretty())
+	}
+	if len(e.remote) > 0 {
+		enc.StringKey("remote", e.remote.Pretty())
+	}
+}
+
+type qlogExporter struct {
 	f        *os.File // QLOGDIR/.log_xxx.qlog.gz.swp
 	filename string   // QLOGDIR/log_xxx.qlog.gz
 	io.WriteCloser
@@ -56,14 +106,14 @@ func newQlogger(qlogDir string, role logging.Perspective, connID []byte) io.Writ
 		return nil
 	}
 	gz := gzip.NewWriter(f)
-	return &qlogger{
+	return &qlogExporter{
 		f:           f,
 		filename:    finalFilename,
 		WriteCloser: newBufferedWriteCloser(bufio.NewWriter(gz), gz),
 	}
 }
 
-func (l *qlogger) Close() error {
+func (l *qlogExporter) Close() error {
 	if err := l.WriteCloser.Close(); err != nil {
 		return err
 	}

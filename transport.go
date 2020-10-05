@@ -20,6 +20,7 @@ import (
 	tpt "github.com/libp2p/go-libp2p-core/transport"
 	p2ptls "github.com/libp2p/go-libp2p-tls"
 	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/qlog"
 	ma "github.com/multiformats/go-multiaddr"
 	mafmt "github.com/multiformats/go-multiaddr-fmt"
 	manet "github.com/multiformats/go-multiaddr-net"
@@ -85,13 +86,12 @@ func (c *connManager) Dial(network string, raddr *net.UDPAddr) (*reuseConn, erro
 
 // The Transport implements the tpt.Transport interface for QUIC connections.
 type transport struct {
-	privKey      ic.PrivKey
-	localPeer    peer.ID
-	identity     *p2ptls.Identity
-	connManager  *connManager
-	serverConfig *quic.Config
-	clientConfig *quic.Config
-	gater        connmgr.ConnectionGater
+	privKey           ic.PrivKey
+	localPeer         peer.ID
+	identity          *p2ptls.Identity
+	connManager       *connManager
+	gater             connmgr.ConnectionGater
+	statelessResetKey [32]byte
 }
 
 var _ tpt.Transport = &transport{}
@@ -114,26 +114,23 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 	if err != nil {
 		return nil, err
 	}
-	config := quicConfig.Clone()
 	keyBytes, err := key.Raw()
 	if err != nil {
 		return nil, err
 	}
 	keyReader := hkdf.New(sha256.New, keyBytes, nil, []byte(statelessResetKeyInfo))
-	config.StatelessResetKey = make([]byte, 32)
-	if _, err := io.ReadFull(keyReader, config.StatelessResetKey); err != nil {
+	var statelessResetKey [32]byte
+	if _, err := io.ReadFull(keyReader, statelessResetKey[:]); err != nil {
 		return nil, err
 	}
-	config.Tracer = tracer
 
 	return &transport{
-		privKey:      key,
-		localPeer:    localPeer,
-		identity:     identity,
-		connManager:  connManager,
-		serverConfig: config,
-		clientConfig: config.Clone(),
-		gater:        gater,
+		privKey:           key,
+		localPeer:         localPeer,
+		identity:          identity,
+		connManager:       connManager,
+		gater:             gater,
+		statelessResetKey: statelessResetKey,
 	}, nil
 }
 
@@ -156,7 +153,16 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	sess, err := quic.DialContext(ctx, pconn, addr, host, tlsConf, t.clientConfig)
+	conf := quicConfig.Clone()
+	conf.StatelessResetKey = t.statelessResetKey[:]
+	conf.Tracer = getTracer(func(tr qlog.ConnectionTracer) {
+		tr.LogExternalEvent(&connectionStartEvent{
+			local:  t.localPeer,
+			remote: p,
+		})
+	})
+
+	sess, err := quic.DialContext(ctx, pconn, addr, host, tlsConf, conf)
 	if err != nil {
 		pconn.DecreaseCount()
 		return nil, err

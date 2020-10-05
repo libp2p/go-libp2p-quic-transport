@@ -25,7 +25,7 @@ var _ = Describe("qlogger", func() {
 		qlogDir, err = ioutil.TempDir("", "libp2p-quic-transport-test")
 		Expect(err).ToNot(HaveOccurred())
 		fmt.Fprintf(GinkgoWriter, "Creating temporary directory: %s\n", qlogDir)
-		initQlogger(qlogDir)
+		initQlogger(qlogDir, nil)
 	})
 
 	AfterEach(func() {
