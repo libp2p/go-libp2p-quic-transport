@@ -8,7 +8,8 @@ require (
 	github.com/libp2p/go-libp2p-core v0.5.6
 	github.com/libp2p/go-libp2p-tls v0.1.3
 	github.com/libp2p/go-netroute v0.1.2
-	github.com/lucas-clemente/quic-go v0.7.1-0.20201005094310-d0eb0143ec3b
+	github.com/lucas-clemente/quic-go v0.18.2-0.20201010063024-ccaec4912a52
+	github.com/marten-seemann/qtls-go1-15 v0.1.1 // indirect
 	github.com/minio/sha256-simd v0.1.1
 	github.com/multiformats/go-multiaddr v0.2.2
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
