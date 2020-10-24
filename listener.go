@@ -3,7 +3,6 @@ package libp2pquic
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
@@ -69,11 +68,15 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 			sess.CloseWithError(0, err.Error())
 			continue
 		}
+		if l.transport.gater != nil && !l.transport.gater.InterceptSecured(n.DirInbound, conn.remotePeerID, conn) {
+			sess.CloseWithError(errorCodeConnectionGating, "connection gated")
+			continue
+		}
 		return conn, nil
 	}
 }
 
-func (l *listener) setupConn(sess quic.Session) (tpt.CapableConn, error) {
+func (l *listener) setupConn(sess quic.Session) (*conn, error) {
 	// The tls.Config used to establish this connection already verified the certificate chain.
 	// Since we don't have any way of knowing which tls.Config was used though,
 	// we have to re-determine the peer's identity here.
@@ -90,11 +93,6 @@ func (l *listener) setupConn(sess quic.Session) (tpt.CapableConn, error) {
 	remoteMultiaddr, err := toQuicMultiaddr(sess.RemoteAddr())
 	if err != nil {
 		return nil, err
-	}
-
-	connaddrs := &connAddrs{lmAddr: l.localMultiaddr, rmAddr: remoteMultiaddr}
-	if l.transport.gater != nil && !l.transport.gater.InterceptSecured(n.DirInbound, remotePeerID, connaddrs) {
-		return nil, fmt.Errorf("secured connection gated")
 	}
 
 	return &conn{
