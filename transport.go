@@ -27,6 +27,8 @@ import (
 
 var log = logging.Logger("quic-transport")
 
+var quicDialContext = quic.DialContext // so we can mock it in tests
+
 var quicConfig = &quic.Config{
 	MaxIncomingStreams:                    1000,
 	MaxIncomingUniStreams:                 -1,             // disable unidirectional streams
@@ -157,7 +159,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	sess, err := quic.DialContext(ctx, pconn, addr, host, tlsConf, t.clientConfig)
+	sess, err := quicDialContext(ctx, pconn, addr, host, tlsConf, t.clientConfig)
 	if err != nil {
 		pconn.DecreaseCount()
 		return nil, err

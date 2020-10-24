@@ -3,17 +3,28 @@ package libp2pquic
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
+	"syscall"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
+	quic "github.com/lucas-clemente/quic-go"
 
 	ma "github.com/multiformats/go-multiaddr"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+// interface containing some methods defined on the net.UDPConn, but not the net.PacketConn
+type udpConn interface {
+	ReadFromUDP(b []byte) (int, *net.UDPAddr, error)
+	SetReadBuffer(bytes int) error
+	SyscallConn() (syscall.RawConn, error)
+}
 
 var _ = Describe("Listener", func() {
 	var t tpt.Transport
@@ -25,6 +36,25 @@ var _ = Describe("Listener", func() {
 		Expect(err).ToNot(HaveOccurred())
 		t, err = NewTransport(key, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("uses a conn that can interface assert to a UDPConn for listening", func() {
+		origQuicListen := quicListen
+		defer func() { quicListen = origQuicListen }()
+
+		var conn net.PacketConn
+		quicListen = func(c net.PacketConn, _ *tls.Config, _ *quic.Config) (quic.Listener, error) {
+			conn = c
+			return nil, errors.New("listen error")
+		}
+		localAddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
+		Expect(err).ToNot(HaveOccurred())
+		_, err = t.Listen(localAddr)
+		Expect(err).To(MatchError("listen error"))
+		Expect(conn).ToNot(BeNil())
+		defer conn.Close()
+		_, ok := conn.(udpConn)
+		Expect(ok).To(BeTrue())
 	})
 
 	Context("listening on the right address", func() {

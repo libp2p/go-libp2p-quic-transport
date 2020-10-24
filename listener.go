@@ -16,6 +16,8 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
+var quicListen = quic.Listen // so we can mock it in tests
+
 // A listener listens for QUIC connections.
 type listener struct {
 	quicListener   quic.Listener
@@ -38,7 +40,7 @@ func newListener(rconn *reuseConn, t *transport, localPeer peer.ID, key ic.PrivK
 		conf, _ := identity.ConfigForAny()
 		return conf, nil
 	}
-	ln, err := quic.Listen(rconn, &tlsConf, t.serverConfig)
+	ln, err := quicListen(rconn, &tlsConf, t.serverConfig)
 	if err != nil {
 		return nil, err
 	}
