@@ -40,6 +40,7 @@ var quicConfig = &quic.Config{
 }
 
 const statelessResetKeyInfo = "libp2p quic stateless reset key"
+const errorCodeConnectionGating = 0x47415445 // GATE in ASCII
 
 type connManager struct {
 	reuseUDP4 *reuse
@@ -184,7 +185,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 
 	connaddrs := &connAddrs{lmAddr: localMultiaddr, rmAddr: remoteMultiaddr}
 	if t.gater != nil && !t.gater.InterceptSecured(n.DirOutbound, p, connaddrs) {
-		sess.CloseWithError(0, "")
+		sess.CloseWithError(errorCodeConnectionGating, "connection gated")
 		return nil, fmt.Errorf("secured connection gated")
 	}
 
