@@ -221,7 +221,12 @@ func (t *transport) Listen(addr ma.Multiaddr) (tpt.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newListener(conn, t, t.localPeer, t.privKey, t.identity)
+	ln, err := newListener(conn, t, t.localPeer, t.privKey, t.identity)
+	if err != nil {
+		conn.DecreaseCount()
+		return nil, err
+	}
+	return ln, nil
 }
 
 // Proxy returns true if this transport proxies.
