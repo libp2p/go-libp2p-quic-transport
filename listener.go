@@ -68,7 +68,7 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 			sess.CloseWithError(0, err.Error())
 			continue
 		}
-		if l.transport.gater != nil && !l.transport.gater.InterceptSecured(n.DirInbound, conn.remotePeerID, conn) {
+		if l.transport.gater != nil && !(l.transport.gater.InterceptAccept(conn) && l.transport.gater.InterceptSecured(n.DirInbound, conn.remotePeerID, conn)) {
 			sess.CloseWithError(errorCodeConnectionGating, "connection gated")
 			continue
 		}

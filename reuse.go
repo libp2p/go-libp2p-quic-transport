@@ -25,9 +25,6 @@ type reuseConn struct {
 }
 
 func newReuseConn(conn net.PacketConn, gater connmgr.ConnectionGater) *reuseConn {
-	if gater != nil {
-		conn = newFilteredConn(conn, gater)
-	}
 	return &reuseConn{PacketConn: conn}
 }
 

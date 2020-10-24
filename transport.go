@@ -182,14 +182,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		sess.CloseWithError(0, "")
 		return nil, err
 	}
-
-	connaddrs := &connAddrs{lmAddr: localMultiaddr, rmAddr: remoteMultiaddr}
-	if t.gater != nil && !t.gater.InterceptSecured(n.DirOutbound, p, connaddrs) {
-		sess.CloseWithError(errorCodeConnectionGating, "connection gated")
-		return nil, fmt.Errorf("secured connection gated")
-	}
-
-	return &conn{
+	conn := &conn{
 		sess:            sess,
 		transport:       t,
 		privKey:         t.privKey,
@@ -198,7 +191,12 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		remotePubKey:    remotePubKey,
 		remotePeerID:    p,
 		remoteMultiaddr: remoteMultiaddr,
-	}, nil
+	}
+	if t.gater != nil && !(t.gater.InterceptAccept(conn) && t.gater.InterceptSecured(n.DirOutbound, p, conn)) {
+		sess.CloseWithError(errorCodeConnectionGating, "connection gated")
+		return nil, fmt.Errorf("secured connection gated")
+	}
+	return conn, nil
 }
 
 // Don't use mafmt.QUIC as we don't want to dial DNS addresses. Just /ip{4,6}/udp/quic
