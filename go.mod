@@ -3,6 +3,7 @@ module github.com/libp2p/go-libp2p-quic-transport
 go 1.14
 
 require (
+	github.com/golang/mock v1.4.4
 	github.com/ipfs/go-log v1.0.4
 	github.com/libp2p/go-libp2p-core v0.5.6
 	github.com/libp2p/go-libp2p-tls v0.1.3
