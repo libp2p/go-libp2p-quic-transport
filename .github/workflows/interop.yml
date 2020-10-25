@@ -19,6 +19,7 @@ jobs:
           go build -o keygen integrationtests/keygen/keygen.go
           ./keygen -prefix server
           ./keygen -prefix client
+          ./keygen -prefix other
       - name: Upload keys
         uses: actions/upload-artifact@v2
         with:

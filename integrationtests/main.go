@@ -13,6 +13,7 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/transport"
 	libp2pquic "github.com/libp2p/go-libp2p-quic-transport"
 	ma "github.com/multiformats/go-multiaddr"
 
@@ -23,6 +24,7 @@ func main() {
 	hostKeyFile := flag.String("key", "", "file containing the libp2p private key")
 	peerKeyFile := flag.String("peerkey", "", "file containing the libp2p private key of the peer")
 	addrStr := flag.String("addr", "", "address to listen on (for the server) or to dial (for the client)")
+	test := flag.String("test", "", "test name")
 	role := flag.String("role", "", "server or client")
 	flag.Parse()
 
@@ -37,11 +39,11 @@ func main() {
 
 	switch *role {
 	case "server":
-		if err := runServer(hostKey, peerPubKey, addr); err != nil {
+		if err := runServer(hostKey, peerPubKey, addr, *test); err != nil {
 			log.Fatal(err)
 		}
 	case "client":
-		if err := runClient(hostKey, peerPubKey, addr); err != nil {
+		if err := runClient(hostKey, peerPubKey, addr, *test); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -72,7 +74,7 @@ func readKeys(hostKeyFile, peerKeyFile string) (crypto.PrivKey, crypto.PubKey, e
 	return hostKey, peerKey.GetPublic(), nil
 }
 
-func runServer(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr) error {
+func runServer(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr, test string) error {
 	tr, err := libp2pquic.NewTransport(hostKey, nil, nil)
 	if err != nil {
 		return err
@@ -84,6 +86,9 @@ func runServer(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr)
 	conn, err := ln.Accept()
 	if err != nil {
 		return err
+	}
+	if test == "handshake-failure" {
+		return errors.New("didn't expect to accept a connection in the handshake-failure test")
 	}
 	defer ln.Close()
 	if !conn.RemotePublicKey().Equals(peerKey) {
@@ -116,12 +121,23 @@ func runServer(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr)
 	}
 }
 
-func runClient(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr) error {
+func runClient(hostKey crypto.PrivKey, serverKey crypto.PubKey, addr ma.Multiaddr, test string) error {
 	tr, err := libp2pquic.NewTransport(hostKey, nil, nil)
 	if err != nil {
 		return err
 	}
-	serverPeerID, err := peer.IDFromPublicKey(peerKey)
+	switch test {
+	case "single-transfer":
+		return testSingleFileTransfer(tr, serverKey, addr)
+	case "handshake-failure":
+		return testHandshakeFailure(tr, serverKey, addr)
+	default:
+		return errors.New("unknown test")
+	}
+}
+
+func testSingleFileTransfer(tr transport.Transport, serverKey crypto.PubKey, addr ma.Multiaddr) error {
+	serverPeerID, err := peer.IDFromPublicKey(serverKey)
 	if err != nil {
 		return err
 	}
@@ -132,7 +148,7 @@ func runClient(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr)
 		return err
 	}
 	defer conn.Close()
-	if !conn.RemotePublicKey().Equals(peerKey) {
+	if !conn.RemotePublicKey().Equals(serverKey) {
 		return errors.New("mismatching public keys")
 	}
 	if conn.RemotePeer() != serverPeerID {
@@ -157,6 +173,23 @@ func runClient(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr)
 	}
 	if !bytes.Equal(data, echoed) {
 		return errors.New("echoed data does not match")
+	}
+	return nil
+}
+
+func testHandshakeFailure(tr transport.Transport, serverKey crypto.PubKey, addr ma.Multiaddr) error {
+	serverPeerID, err := peer.IDFromPublicKey(serverKey)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err = tr.Dial(ctx, addr, serverPeerID)
+	if err == nil {
+		return errors.New("expected the handshake to fail")
+	}
+	if err.Error() != "CRYPTO_ERROR: peer IDs don't match" {
+		return fmt.Errorf("got unexpected error: %s", err.Error())
 	}
 	return nil
 }
