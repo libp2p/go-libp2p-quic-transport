@@ -209,7 +209,6 @@ var _ = Describe("Connection", func() {
 		defer ln.Close()
 
 		cg := NewMockConnectionGater(mockCtrl)
-		cg.EXPECT().InterceptAccept(gomock.Any()).Return(true)
 		cg.EXPECT().InterceptSecured(gomock.Any(), gomock.Any(), gomock.Any())
 
 		clientTransport, err := NewTransport(clientKey, nil, cg)
@@ -221,7 +220,6 @@ var _ = Describe("Connection", func() {
 		Expect(err.Error()).To(ContainSubstring("connection gated"))
 
 		// now allow the peerId and make sure the connection goes through
-		cg.EXPECT().InterceptAccept(gomock.Any()).Return(true)
 		cg.EXPECT().InterceptSecured(gomock.Any(), gomock.Any(), gomock.Any()).Return(true)
 		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
