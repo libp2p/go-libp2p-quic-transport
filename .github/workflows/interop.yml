@@ -19,6 +19,7 @@ jobs:
           go build -o keygen integrationtests/keygen/keygen.go
           ./keygen -prefix server
           ./keygen -prefix client
+          ./keygen -prefix other
       - name: Upload keys
         uses: actions/upload-artifact@v2
         with:
@@ -57,11 +58,17 @@ jobs:
           rm -rf integrationtests || true
           mv builder integrationtests
           git reflog --decorate -1
-          if [[ `git merge-base --is-ancestor HEAD 126c64772ba0aef0b2b6d58ff36e55a93f9253a7; echo $?` == "1" ]]; then
-            go build -o transport-go${{ matrix.cfg.go }}-${{ matrix.cfg.commit }} integrationtests/main.go
-          else
-            go build -tags oldstream -o transport-go${{ matrix.cfg.go }}-${{ matrix.cfg.commit }} integrationtests/main.go
+          TAGS=()
+          if [[ `git merge-base --is-ancestor HEAD 126c64772ba0aef0b2b6d58ff36e55a93f9253a7; echo $?` != "1" ]]; then
+            TAGS+=("oldstream")
           fi
+          if [[ "${{ matrix.cfg.retireBugBackwardsCompatiblityMode }}" == "true" ]]; then
+            TAGS+=("retirebugcompatmode")
+          fi
+          function join { local IFS="$1"; shift; echo "$*"; }
+          tags=$(join , ${TAGS[@]})
+          if [[ -n $tags ]]; then tags="-tags $tags"; fi
+          go build $tags -o transport-go${{ matrix.cfg.go }}-${{ matrix.cfg.commit }} integrationtests/main.go
       - name: Upload binary
         uses: actions/upload-artifact@v2
         with:
@@ -88,8 +95,13 @@ jobs:
         with:
           name: binary
           path: interop/
-      - name: Run interop
-        run: |
-          cd interop
-          chmod 744 transport*
-          ../.github/workflows/interop.sh transport-go${{ matrix.server.go }}-${{ matrix.server.commit }} transport-go${{ matrix.client.go }}-${{ matrix.client.commit }}
+      - name: Set permissions
+        run: chmod 744 interop/transport*
+      - name: 'Run test case: handshake-failure'
+        run: cd interop && ../.github/workflows/interop.sh transport-go${{ matrix.server.go }}-${{ matrix.server.commit }} transport-go${{ matrix.client.go }}-${{ matrix.client.commit }} handshake-failure
+      - name: 'Run test case: single-transfer'
+        run: cd interop && ../.github/workflows/interop.sh transport-go${{ matrix.server.go }}-${{ matrix.server.commit }} transport-go${{ matrix.client.go }}-${{ matrix.client.commit }} single-transfer
+      - name: 'Run test case: multi-transfer'
+        # Longer transfers might fail if the version has the connection ID retirement bug, see https://github.com/ipfs/go-ipfs/issues/7526.
+        if: ${{ matrix.client.retireBugBackwardsCompatiblityMode || matrix.server.retireBugBackwardsCompatiblityMode }}
+        run: cd interop && ../.github/workflows/interop.sh transport-go${{ matrix.server.go }}-${{ matrix.server.commit }} transport-go${{ matrix.client.go }}-${{ matrix.client.commit }} multi-transfer

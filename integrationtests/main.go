@@ -13,8 +13,10 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/transport"
 	libp2pquic "github.com/libp2p/go-libp2p-quic-transport"
 	ma "github.com/multiformats/go-multiaddr"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/stream"
 )
@@ -23,6 +25,7 @@ func main() {
 	hostKeyFile := flag.String("key", "", "file containing the libp2p private key")
 	peerKeyFile := flag.String("peerkey", "", "file containing the libp2p private key of the peer")
 	addrStr := flag.String("addr", "", "address to listen on (for the server) or to dial (for the client)")
+	test := flag.String("test", "", "test name")
 	role := flag.String("role", "", "server or client")
 	flag.Parse()
 
@@ -37,11 +40,11 @@ func main() {
 
 	switch *role {
 	case "server":
-		if err := runServer(hostKey, peerPubKey, addr); err != nil {
+		if err := runServer(hostKey, peerPubKey, addr, *test); err != nil {
 			log.Fatal(err)
 		}
 	case "client":
-		if err := runClient(hostKey, peerPubKey, addr); err != nil {
+		if err := runClient(hostKey, peerPubKey, addr, *test); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -72,7 +75,7 @@ func readKeys(hostKeyFile, peerKeyFile string) (crypto.PrivKey, crypto.PubKey, e
 	return hostKey, peerKey.GetPublic(), nil
 }
 
-func runServer(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr) error {
+func runServer(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr, test string) error {
 	tr, err := libp2pquic.NewTransport(hostKey, nil, nil)
 	if err != nil {
 		return err
@@ -85,6 +88,9 @@ func runServer(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr)
 	if err != nil {
 		return err
 	}
+	if test == "handshake-failure" {
+		return errors.New("didn't expect to accept a connection in the handshake-failure test")
+	}
 	defer ln.Close()
 	if !conn.RemotePublicKey().Equals(peerKey) {
 		return errors.New("mismatching public keys")
@@ -96,43 +102,60 @@ func runServer(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr)
 	if conn.RemotePeer() != clientPeerID {
 		return fmt.Errorf("remote Peer ID mismatch. Got %s, expected %s", conn.RemotePeer().Pretty(), clientPeerID.Pretty())
 	}
+	var g errgroup.Group
 	for {
 		st, err := conn.AcceptStream()
 		if err != nil {
-			return nil
+			break
 		}
 		str := stream.WrapStream(st)
-		defer str.Close()
-		data, err := ioutil.ReadAll(str)
-		if err != nil {
-			return err
-		}
-		if _, err := str.Write(data); err != nil {
-			return err
-		}
-		if err := str.CloseWrite(); err != nil {
-			return err
-		}
+		g.Go(func() error {
+			data, err := ioutil.ReadAll(str)
+			if err != nil {
+				return err
+			}
+			if err := str.CloseRead(); err != nil {
+				return err
+			}
+			if _, err := str.Write(data); err != nil {
+				return err
+			}
+			return str.CloseWrite()
+		})
 	}
+	return g.Wait()
 }
 
-func runClient(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr) error {
+func runClient(hostKey crypto.PrivKey, serverKey crypto.PubKey, addr ma.Multiaddr, test string) error {
 	tr, err := libp2pquic.NewTransport(hostKey, nil, nil)
 	if err != nil {
 		return err
 	}
-	serverPeerID, err := peer.IDFromPublicKey(peerKey)
+	switch test {
+	case "single-transfer":
+		return testSingleFileTransfer(tr, serverKey, addr)
+	case "multi-transfer":
+		return testMultipleFileTransfer(tr, serverKey, addr)
+	case "handshake-failure":
+		return testHandshakeFailure(tr, serverKey, addr)
+	default:
+		return errors.New("unknown test")
+	}
+}
+
+func testSingleFileTransfer(tr transport.Transport, serverKey crypto.PubKey, addr ma.Multiaddr) error {
+	serverPeerID, err := peer.IDFromPublicKey(serverKey)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	conn, err := tr.Dial(ctx, addr, serverPeerID)
 	if err != nil {
-		return err
+		return fmt.Errorf("Dial failed: %w", err)
 	}
 	defer conn.Close()
-	if !conn.RemotePublicKey().Equals(peerKey) {
+	if !conn.RemotePublicKey().Equals(serverKey) {
 		return errors.New("mismatching public keys")
 	}
 	if conn.RemotePeer() != serverPeerID {
@@ -157,6 +180,70 @@ func runClient(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr)
 	}
 	if !bytes.Equal(data, echoed) {
 		return errors.New("echoed data does not match")
+	}
+	return nil
+}
+
+func testMultipleFileTransfer(tr transport.Transport, serverKey crypto.PubKey, addr ma.Multiaddr) error {
+	serverPeerID, err := peer.IDFromPublicKey(serverKey)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	conn, err := tr.Dial(ctx, addr, serverPeerID)
+	if err != nil {
+		return fmt.Errorf("Dial failed: %w", err)
+	}
+	defer conn.Close()
+	if !conn.RemotePublicKey().Equals(serverKey) {
+		return errors.New("mismatching public keys")
+	}
+	if conn.RemotePeer() != serverPeerID {
+		return fmt.Errorf("remote Peer ID mismatch. Got %s, expected %s", conn.RemotePeer().Pretty(), serverPeerID.Pretty())
+	}
+	var g errgroup.Group
+	for i := 0; i < 2000; i++ {
+		g.Go(func() error {
+			st, err := conn.OpenStream()
+			if err != nil {
+				return err
+			}
+			str := stream.WrapStream(st)
+			data := make([]byte, 1<<9)
+			rand.Read(data)
+			if _, err := str.Write(data); err != nil {
+				return err
+			}
+			if err := str.CloseWrite(); err != nil {
+				return err
+			}
+			echoed, err := ioutil.ReadAll(str)
+			if err != nil {
+				return err
+			}
+			if !bytes.Equal(data, echoed) {
+				return errors.New("echoed data does not match")
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
+func testHandshakeFailure(tr transport.Transport, serverKey crypto.PubKey, addr ma.Multiaddr) error {
+	serverPeerID, err := peer.IDFromPublicKey(serverKey)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err = tr.Dial(ctx, addr, serverPeerID)
+	if err == nil {
+		return errors.New("expected the handshake to fail")
+	}
+	if err.Error() != "CRYPTO_ERROR: peer IDs don't match" {
+		return fmt.Errorf("got unexpected error: %s", err.Error())
 	}
 	return nil
 }

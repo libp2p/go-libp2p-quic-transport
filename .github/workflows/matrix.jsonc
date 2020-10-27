@@ -1,11 +1,13 @@
 [
-  { "go": "1.13", "commit": "v0.6.0" },
-  { "go": "1.14", "commit": "v0.6.0" },
-  { "go": "1.13", "commit": "v0.7.0" },
-  { "go": "1.14", "commit": "v0.7.0" },
+  { "go": "1.13", "commit": "v0.6.0", "retireBugBackwardsCompatiblityMode": false },
+  { "go": "1.14", "commit": "v0.6.0", "retireBugBackwardsCompatiblityMode": false },
+  { "go": "1.13", "commit": "v0.7.0", "retireBugBackwardsCompatiblityMode": false },
+  { "go": "1.14", "commit": "v0.7.0", "retireBugBackwardsCompatiblityMode": false },
+  { "go": "1.13", "commit": "v0.7.1", "retireBugBackwardsCompatiblityMode": true },
+  { "go": "1.14", "commit": "v0.7.1", "retireBugBackwardsCompatiblityMode": true },
   // v0.7.1 was never released in IPFS.
-  { "go": "1.14", "commit": "v0.8.0" },
-  { "go": "1.15", "commit": "v0.8.0" },
-  { "go": "1.14", "commit": "HEAD" },
-  { "go": "1.15", "commit": "HEAD" }
+  { "go": "1.14", "commit": "v0.8.0", "retireBugBackwardsCompatiblityMode": true },
+  { "go": "1.15", "commit": "v0.8.0", "retireBugBackwardsCompatiblityMode": true },
+  { "go": "1.14", "commit": "HEAD", "retireBugBackwardsCompatiblityMode": true },
+  { "go": "1.15", "commit": "HEAD", "retireBugBackwardsCompatiblityMode": true }
 ]
