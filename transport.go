@@ -194,7 +194,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		remotePeerID:    p,
 		remoteMultiaddr: remoteMultiaddr,
 	}
-	if t.gater != nil && !(t.gater.InterceptAccept(conn) && t.gater.InterceptSecured(n.DirOutbound, p, conn)) {
+	if t.gater != nil && !t.gater.InterceptSecured(n.DirOutbound, p, conn) {
 		sess.CloseWithError(errorCodeConnectionGating, "connection gated")
 		return nil, fmt.Errorf("secured connection gated")
 	}
