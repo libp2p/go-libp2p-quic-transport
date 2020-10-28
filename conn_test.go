@@ -8,54 +8,22 @@ import (
 	"io/ioutil"
 	mrand "math/rand"
 	"net"
-	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/libp2p/go-libp2p-core/control"
+	gomock "github.com/golang/mock/gomock"
 	ic "github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
 
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr/net"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-type mockGater struct {
-	lk          sync.Mutex
-	acceptAll   bool
-	blockedPeer peer.ID
-}
-
-func (c *mockGater) InterceptAccept(addrs network.ConnMultiaddrs) bool {
-	c.lk.Lock()
-	defer c.lk.Unlock()
-	return c.acceptAll || !manet.IsIPLoopback(addrs.RemoteMultiaddr())
-}
-
-func (c *mockGater) InterceptPeerDial(p peer.ID) (allow bool) {
-	return true
-}
-
-func (c *mockGater) InterceptAddrDial(peer.ID, ma.Multiaddr) (allow bool) {
-	return true
-}
-
-func (c *mockGater) InterceptSecured(_ network.Direction, p peer.ID, _ network.ConnMultiaddrs) (allow bool) {
-	c.lk.Lock()
-	defer c.lk.Unlock()
-	return p != c.blockedPeer
-}
-
-func (c *mockGater) InterceptUpgraded(network.Conn) (allow bool, reason control.DisconnectReason) {
-	return true, 0
-}
-
+//go:generate sh -c "mockgen -package libp2pquic -destination mock_connection_gater_test.go github.com/libp2p/go-libp2p-core/connmgr ConnectionGater && goimports -w mock_connection_gater_test.go"
 var _ = Describe("Connection", func() {
 	var (
 		serverKey, clientKey ic.PrivKey
@@ -200,33 +168,38 @@ var _ = Describe("Connection", func() {
 	})
 
 	It("gates accepted connections", func() {
-		testMA, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/1234/quic")
-		Expect(err).ToNot(HaveOccurred())
-		cg := &mockGater{}
-		Expect(cg.InterceptAccept(&connAddrs{rmAddr: testMA})).To(BeFalse())
-
+		cg := NewMockConnectionGater(mockCtrl)
+		cg.EXPECT().InterceptAccept(gomock.Any())
 		serverTransport, err := NewTransport(serverKey, nil, cg)
 		Expect(err).ToNot(HaveOccurred())
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
 
+		accepted := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			defer close(accepted)
+			_, err := ln.Accept()
+			Expect(err).ToNot(HaveOccurred())
+		}()
+
 		clientTransport, err := NewTransport(clientKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
-
 		// make sure that connection attempts fails
-		clientTransport.(*transport).clientConfig.HandshakeTimeout = 250 * time.Millisecond
-		_, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
-		Expect(err).To(HaveOccurred())
-		Expect(err.(net.Error).Timeout()).To(BeTrue())
-
-		// now allow the address and make sure the connection goes through
-		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
-		cg.lk.Lock()
-		cg.acceptAll = true
-		cg.lk.Unlock()
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
-		conn.Close()
+		_, err = conn.AcceptStream()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("connection gated"))
+
+		// now allow the address and make sure the connection goes through
+		cg.EXPECT().InterceptAccept(gomock.Any()).Return(true)
+		cg.EXPECT().InterceptSecured(gomock.Any(), gomock.Any(), gomock.Any()).Return(true)
+		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
+		conn, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
+		Expect(err).ToNot(HaveOccurred())
+		defer conn.Close()
+		Eventually(accepted).Should(BeClosed())
 	})
 
 	It("gates secured connections", func() {
@@ -235,20 +208,20 @@ var _ = Describe("Connection", func() {
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
 
-		cg := &mockGater{acceptAll: true, blockedPeer: serverID}
+		cg := NewMockConnectionGater(mockCtrl)
+		cg.EXPECT().InterceptSecured(gomock.Any(), gomock.Any(), gomock.Any())
+
 		clientTransport, err := NewTransport(clientKey, nil, cg)
 		Expect(err).ToNot(HaveOccurred())
 
 		// make sure that connection attempts fails
-		clientTransport.(*transport).clientConfig.HandshakeTimeout = 250 * time.Millisecond
 		_, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("connection gated"))
 
 		// now allow the peerId and make sure the connection goes through
+		cg.EXPECT().InterceptSecured(gomock.Any(), gomock.Any(), gomock.Any()).Return(true)
 		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
-		cg.lk.Lock()
-		cg.blockedPeer = "none"
-		cg.lk.Unlock()
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
 		conn.Close()

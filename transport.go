@@ -27,6 +27,8 @@ import (
 
 var log = logging.Logger("quic-transport")
 
+var quicDialContext = quic.DialContext // so we can mock it in tests
+
 var quicConfig = &quic.Config{
 	MaxIncomingStreams:                    1000,
 	MaxIncomingUniStreams:                 -1,             // disable unidirectional streams
@@ -40,6 +42,7 @@ var quicConfig = &quic.Config{
 }
 
 const statelessResetKeyInfo = "libp2p quic stateless reset key"
+const errorCodeConnectionGating = 0x47415445 // GATE in ASCII
 
 type connManager struct {
 	reuseUDP4 *reuse
@@ -156,7 +159,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	sess, err := quic.DialContext(ctx, pconn, addr, host, tlsConf, t.clientConfig)
+	sess, err := quicDialContext(ctx, pconn, addr, host, tlsConf, t.clientConfig)
 	if err != nil {
 		pconn.DecreaseCount()
 		return nil, err
@@ -181,14 +184,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		sess.CloseWithError(0, "")
 		return nil, err
 	}
-
-	connaddrs := &connAddrs{lmAddr: localMultiaddr, rmAddr: remoteMultiaddr}
-	if t.gater != nil && !t.gater.InterceptSecured(n.DirOutbound, p, connaddrs) {
-		sess.CloseWithError(0, "")
-		return nil, fmt.Errorf("secured connection gated")
-	}
-
-	return &conn{
+	conn := &conn{
 		sess:            sess,
 		transport:       t,
 		privKey:         t.privKey,
@@ -197,7 +193,12 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		remotePubKey:    remotePubKey,
 		remotePeerID:    p,
 		remoteMultiaddr: remoteMultiaddr,
-	}, nil
+	}
+	if t.gater != nil && !t.gater.InterceptSecured(n.DirOutbound, p, conn) {
+		sess.CloseWithError(errorCodeConnectionGating, "connection gated")
+		return nil, fmt.Errorf("secured connection gated")
+	}
+	return conn, nil
 }
 
 // Don't use mafmt.QUIC as we don't want to dial DNS addresses. Just /ip{4,6}/udp/quic
@@ -222,7 +223,12 @@ func (t *transport) Listen(addr ma.Multiaddr) (tpt.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newListener(conn, t, t.localPeer, t.privKey, t.identity)
+	ln, err := newListener(conn, t, t.localPeer, t.privKey, t.identity)
+	if err != nil {
+		conn.DecreaseCount()
+		return nil, err
+	}
+	return ln, nil
 }
 
 // Proxy returns true if this transport proxies.

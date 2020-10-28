@@ -17,18 +17,15 @@ var (
 )
 
 type reuseConn struct {
-	net.PacketConn
+	*net.UDPConn
 
 	mutex       sync.Mutex
 	refCount    int
 	unusedSince time.Time
 }
 
-func newReuseConn(conn net.PacketConn, gater connmgr.ConnectionGater) *reuseConn {
-	if gater != nil {
-		conn = newFilteredConn(conn, gater)
-	}
-	return &reuseConn{PacketConn: conn}
+func newReuseConn(conn *net.UDPConn, gater connmgr.ConnectionGater) *reuseConn {
+	return &reuseConn{UDPConn: conn}
 }
 
 func (c *reuseConn) IncreaseCount() {
