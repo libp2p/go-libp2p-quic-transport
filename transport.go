@@ -39,7 +39,6 @@ var quicConfig = &quic.Config{
 		return true
 	},
 	KeepAlive: true,
-	Versions:  []quic.VersionNumber{quic.VersionDraft29, quic.VersionDraft32},
 }
 
 const statelessResetKeyInfo = "libp2p quic stateless reset key"

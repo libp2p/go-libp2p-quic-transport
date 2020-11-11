@@ -1,10 +1,5 @@
 name: interop
-on:
-  push:
-    branches: master
-    tags:
-  pull_request:
-    branches: master
+on: [ push ]
 
 jobs:
   keygen:
