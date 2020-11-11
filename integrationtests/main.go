@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/crypto"
@@ -242,8 +243,8 @@ func testHandshakeFailure(tr transport.Transport, serverKey crypto.PubKey, addr 
 	if err == nil {
 		return errors.New("expected the handshake to fail")
 	}
-	if err.Error() != "CRYPTO_ERROR: peer IDs don't match" {
-		return fmt.Errorf("got unexpected error: %s", err.Error())
+	if !strings.Contains(err.Error(), "CRYPTO_ERROR") || !strings.Contains(err.Error(), "peer IDs don't match") {
+		return fmt.Errorf("got unexpected error: %w", err)
 	}
 	return nil
 }
