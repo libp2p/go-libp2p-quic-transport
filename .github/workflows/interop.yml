@@ -103,5 +103,6 @@ jobs:
         run: cd interop && ../.github/workflows/interop.sh transport-go${{ matrix.server.go }}-${{ matrix.server.commit }} transport-go${{ matrix.client.go }}-${{ matrix.client.commit }} single-transfer
       - name: 'Run test case: multi-transfer'
         # Longer transfers might fail if the version has the connection ID retirement bug, see https://github.com/ipfs/go-ipfs/issues/7526.
-        if: ${{ matrix.client.retireBugBackwardsCompatiblityMode || matrix.server.retireBugBackwardsCompatiblityMode }}
+        # The busy-looping bug might prevent all streams from being opened, see https://github.com/lucas-clemente/quic-go/pull/2827.
+        if: ${{ !matrix.client.hasOpenStreamBug && (matrix.client.retireBugBackwardsCompatiblityMode || matrix.server.retireBugBackwardsCompatiblityMode) }}
         run: cd interop && ../.github/workflows/interop.sh transport-go${{ matrix.server.go }}-${{ matrix.server.commit }} transport-go${{ matrix.client.go }}-${{ matrix.client.commit }} multi-transfer
