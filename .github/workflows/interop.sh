@@ -21,8 +21,9 @@ for k1 in server*.key; do
     else
       echo -e "\nRunning with server $SERVER ($k1) and client $CLIENT ($k2). Test: $TEST"
       ./$SERVER -role server -key $k1 -peerkey $k2 -addr $SERVER_ADDR -test $TEST &
+      PID=$!
       time ./$CLIENT -role client -key $k2 -peerkey $k1 -addr $SERVER_ADDR -test $TEST
-      wait
+      wait $PID
     fi
   done;
 done;
