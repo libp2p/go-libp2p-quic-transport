@@ -1,13 +1,13 @@
 [
-  { "go": "1.13", "commit": "v0.6.0", "retireBugBackwardsCompatiblityMode": false, "hasOpenStreamBug": true },
-  { "go": "1.14", "commit": "v0.6.0", "retireBugBackwardsCompatiblityMode": false, "hasOpenStreamBug": true },
-  { "go": "1.13", "commit": "v0.7.0", "retireBugBackwardsCompatiblityMode": false, "hasOpenStreamBug": true },
-  { "go": "1.14", "commit": "v0.7.0", "retireBugBackwardsCompatiblityMode": false, "hasOpenStreamBug": true},
-  { "go": "1.13", "commit": "v0.7.1", "retireBugBackwardsCompatiblityMode": true, "hasOpenStreamBug": true },
-  { "go": "1.14", "commit": "v0.7.1", "retireBugBackwardsCompatiblityMode": true, "hasOpenStreamBug": true },
+  { "go": "1.13", "commit": "v0.6.0", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": true },
+  { "go": "1.14", "commit": "v0.6.0", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": true },
+  { "go": "1.13", "commit": "v0.7.0", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": true },
+  { "go": "1.14", "commit": "v0.7.0", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": true},
+  { "go": "1.13", "commit": "v0.7.1", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": true },
+  { "go": "1.14", "commit": "v0.7.1", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": true },
   // v0.7.1 was never released in IPFS.
-  { "go": "1.14", "commit": "v0.8.0", "retireBugBackwardsCompatiblityMode": true, "hasOpenStreamBug": true },
-  { "go": "1.15", "commit": "v0.8.0", "retireBugBackwardsCompatiblityMode": true, "hasOpenStreamBug": true },
-  { "go": "1.14", "commit": "HEAD", "retireBugBackwardsCompatiblityMode": true, "hasOpenStreamBug": true },
-  { "go": "1.15", "commit": "HEAD", "retireBugBackwardsCompatiblityMode": true, "hasOpenStreamBug": true }
+  { "go": "1.14", "commit": "v0.8.0", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": true },
+  { "go": "1.15", "commit": "v0.8.0", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": true },
+  { "go": "1.14", "commit": "HEAD", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": false },
+  { "go": "1.15", "commit": "HEAD", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": false }
 ]
