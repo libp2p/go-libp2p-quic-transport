@@ -2,10 +2,12 @@ package libp2pquic
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"os"
 
 	"github.com/libp2p/go-libp2p-core/connmgr"
 	n "github.com/libp2p/go-libp2p-core/network"
@@ -44,6 +46,18 @@ var quicConfig = &quic.Config{
 
 const statelessResetKeyInfo = "libp2p quic stateless reset key"
 const errorCodeConnectionGating = 0x47415445 // GATE in ASCII
+
+func maybeSetKeyLogFile(tlsConf *tls.Config) {
+	keylog := os.Getenv("SSLKEYLOGFILE")
+	if len(keylog) == 0 {
+		return
+	}
+	f, err := os.Create(keylog)
+	if err != nil {
+		log.Fatalf("Failed to create key log file %s: %w", keylog, err)
+	}
+	tlsConf.KeyLogWriter = f
+}
 
 type connManager struct {
 	reuseUDP4 *reuse
@@ -156,6 +170,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		return nil, err
 	}
 	tlsConf, keyCh := t.identity.ConfigForPeer(p)
+	maybeSetKeyLogFile(tlsConf)
 	pconn, err := t.connManager.Dial(network, addr)
 	if err != nil {
 		return nil, err
