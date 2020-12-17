@@ -19,6 +19,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/conn"
 	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/stream"
 )
 
@@ -151,18 +152,18 @@ func testSingleFileTransfer(tr transport.Transport, serverKey crypto.PubKey, add
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	conn, err := tr.Dial(ctx, addr, serverPeerID)
+	c, err := tr.Dial(ctx, addr, serverPeerID)
 	if err != nil {
 		return fmt.Errorf("Dial failed: %w", err)
 	}
-	defer conn.Close()
-	if !conn.RemotePublicKey().Equals(serverKey) {
+	defer c.Close()
+	if !c.RemotePublicKey().Equals(serverKey) {
 		return errors.New("mismatching public keys")
 	}
-	if conn.RemotePeer() != serverPeerID {
-		return fmt.Errorf("remote Peer ID mismatch. Got %s, expected %s", conn.RemotePeer().Pretty(), serverPeerID.Pretty())
+	if c.RemotePeer() != serverPeerID {
+		return fmt.Errorf("remote Peer ID mismatch. Got %s, expected %s", c.RemotePeer().Pretty(), serverPeerID.Pretty())
 	}
-	st, err := conn.OpenStream()
+	st, err := conn.OpenStream(context.Background(), c)
 	if err != nil {
 		return err
 	}
@@ -192,21 +193,21 @@ func testMultipleFileTransfer(tr transport.Transport, serverKey crypto.PubKey, a
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	conn, err := tr.Dial(ctx, addr, serverPeerID)
+	c, err := tr.Dial(ctx, addr, serverPeerID)
 	if err != nil {
 		return fmt.Errorf("Dial failed: %w", err)
 	}
-	defer conn.Close()
-	if !conn.RemotePublicKey().Equals(serverKey) {
+	defer c.Close()
+	if !c.RemotePublicKey().Equals(serverKey) {
 		return errors.New("mismatching public keys")
 	}
-	if conn.RemotePeer() != serverPeerID {
-		return fmt.Errorf("remote Peer ID mismatch. Got %s, expected %s", conn.RemotePeer().Pretty(), serverPeerID.Pretty())
+	if c.RemotePeer() != serverPeerID {
+		return fmt.Errorf("remote Peer ID mismatch. Got %s, expected %s", c.RemotePeer().Pretty(), serverPeerID.Pretty())
 	}
 	var g errgroup.Group
 	for i := 0; i < 2000; i++ {
 		g.Go(func() error {
-			st, err := conn.OpenStream()
+			st, err := conn.OpenStream(context.Background(), c)
 			if err != nil {
 				return err
 			}

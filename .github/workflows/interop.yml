@@ -60,7 +60,10 @@ jobs:
           git reflog --decorate -1
           TAGS=()
           if [[ `git merge-base --is-ancestor HEAD 126c64772ba0aef0b2b6d58ff36e55a93f9253a7; echo $?` != "1" ]]; then
-            TAGS+=("oldstream")
+            TAGS+=("old_stream_close")
+          fi
+          if [[ `git merge-base --is-ancestor HEAD 3123af36d6cec13e31dac75058c8046e6e4a6690; echo $?` != "1" ]]; then
+            TAGS+=("stream_open_no_context")
           fi
           if [[ "${{ matrix.cfg.retireBugBackwardsCompatiblityMode }}" == "true" ]]; then
             TAGS+=("retirebugcompatmode")

@@ -1,4 +1,4 @@
-// +build oldstream
+// +build old_stream_close
 
 package stream
 

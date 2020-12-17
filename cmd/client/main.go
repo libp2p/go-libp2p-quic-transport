@@ -49,7 +49,7 @@ func run(raddr string, p string) error {
 		return err
 	}
 	defer conn.Close()
-	str, err := conn.OpenStream()
+	str, err := conn.OpenStream(context.Background())
 	if err != nil {
 		return err
 	}
