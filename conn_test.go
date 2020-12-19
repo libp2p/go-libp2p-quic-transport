@@ -130,7 +130,7 @@ var _ = Describe("Connection", func() {
 		Expect(err).ToNot(HaveOccurred())
 		defer serverConn.Close()
 
-		str, err := conn.OpenStream()
+		str, err := conn.OpenStream(context.Background())
 		Expect(err).ToNot(HaveOccurred())
 		_, err = str.Write([]byte("foobar"))
 		Expect(err).ToNot(HaveOccurred())
@@ -251,7 +251,7 @@ var _ = Describe("Connection", func() {
 			for _, c := range []tpt.CapableConn{serverConn1, serverConn2} {
 				go func(conn tpt.CapableConn) {
 					defer GinkgoRecover()
-					str, err := conn.OpenStream()
+					str, err := conn.OpenStream(context.Background())
 					Expect(err).ToNot(HaveOccurred())
 					defer str.Close()
 					_, err = str.Write(data)
@@ -315,7 +315,7 @@ var _ = Describe("Connection", func() {
 			defer GinkgoRecover()
 			conn, err := ln.Accept()
 			Expect(err).ToNot(HaveOccurred())
-			str, err := conn.OpenStream()
+			str, err := conn.OpenStream(context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			str.Write([]byte("foobar"))
 		}()

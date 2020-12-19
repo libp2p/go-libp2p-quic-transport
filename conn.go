@@ -37,8 +37,8 @@ func (c *conn) IsClosed() bool {
 }
 
 // OpenStream creates a new stream.
-func (c *conn) OpenStream() (mux.MuxedStream, error) {
-	qstr, err := c.sess.OpenStreamSync(context.Background())
+func (c *conn) OpenStream(ctx context.Context) (mux.MuxedStream, error) {
+	qstr, err := c.sess.OpenStreamSync(ctx)
 	return &stream{Stream: qstr}, err
 }
 
