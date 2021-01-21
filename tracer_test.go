@@ -2,10 +2,11 @@ package libp2pquic
 
 import (
 	"bytes"
-	"compress/gzip"
 	"fmt"
 	"io/ioutil"
 	"os"
+
+	"github.com/klauspost/compress/zstd"
 
 	"github.com/lucas-clemente/quic-go/logging"
 
@@ -43,12 +44,12 @@ var _ = Describe("qlogger", func() {
 		logger := newQlogger(qlogDir, logging.PerspectiveServer, []byte{0xde, 0xad, 0xbe, 0xef})
 		file := getFile()
 		Expect(string(file.Name()[0])).To(Equal("."))
-		Expect(file.Name()).To(HaveSuffix(".qlog.gz.swp"))
+		Expect(file.Name()).To(HaveSuffix(".qlog.zst.swp"))
 		// close the logger. This should move the file.
 		Expect(logger.Close()).To(Succeed())
 		file = getFile()
 		Expect(string(file.Name()[0])).ToNot(Equal("."))
-		Expect(file.Name()).To(HaveSuffix(".qlog.gz"))
+		Expect(file.Name()).To(HaveSuffix(".qlog.zst"))
 		Expect(file.Name()).To(And(
 			ContainSubstring("server"),
 			ContainSubstring("deadbeef"),
@@ -76,7 +77,7 @@ var _ = Describe("qlogger", func() {
 		compressed, err := ioutil.ReadFile(qlogDir + "/" + getFile().Name())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(compressed).ToNot(Equal("foobar"))
-		gz, err := gzip.NewReader(bytes.NewReader(compressed))
+		gz, err := zstd.NewReader(bytes.NewReader(compressed))
 		Expect(err).ToNot(HaveOccurred())
 		data, err := ioutil.ReadAll(gz)
 		Expect(err).ToNot(HaveOccurred())

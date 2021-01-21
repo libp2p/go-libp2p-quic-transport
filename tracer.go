@@ -2,11 +2,12 @@ package libp2pquic
 
 import (
 	"bufio"
-	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
 	"time"
+
+	"github.com/klauspost/compress/zstd"
 
 	"github.com/lucas-clemente/quic-go/logging"
 	"github.com/lucas-clemente/quic-go/metrics"
@@ -48,14 +49,18 @@ func newQlogger(qlogDir string, role logging.Perspective, connID []byte) io.Writ
 	if role == logging.PerspectiveClient {
 		r = "client"
 	}
-	finalFilename := fmt.Sprintf("%s%clog_%s_%s_%x.qlog.gz", qlogDir, os.PathSeparator, t, r, connID)
-	filename := fmt.Sprintf("%s%c.log_%s_%s_%x.qlog.gz.swp", qlogDir, os.PathSeparator, t, r, connID)
+	finalFilename := fmt.Sprintf("%s%clog_%s_%s_%x.qlog.zst", qlogDir, os.PathSeparator, t, r, connID)
+	filename := fmt.Sprintf("%s%c.log_%s_%s_%x.qlog.zst.swp", qlogDir, os.PathSeparator, t, r, connID)
 	f, err := os.Create(filename)
 	if err != nil {
 		log.Errorf("unable to create qlog file %s: %s", filename, err)
 		return nil
 	}
-	gz := gzip.NewWriter(f)
+	gz, err := zstd.NewWriter(f, zstd.WithEncoderLevel(zstd.SpeedFastest))
+	if err != nil {
+		log.Errorf("failed to initialize zstd: %s", err)
+		return nil
+	}
 	return &qlogger{
 		f:           f,
 		filename:    finalFilename,
