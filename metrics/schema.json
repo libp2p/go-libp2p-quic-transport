@@ -1,0 +1,245 @@
+[
+  {
+    "name": "node",
+    "type": "STRING"
+  },
+  {
+    "name": "node_boot_time",
+    "type": "TIMESTAMP"
+  },
+  {
+    "name": "quic_go_version",
+    "type": "STRING"
+  },
+  {
+    "name": "is_client",
+    "type": "BOOLEAN"
+  },
+  {
+    "name": "start_time",
+    "type": "TIMESTAMP"
+  },
+  {
+    "name": "end_time",
+    "type": "TIMESTAMP"
+  },
+  {
+    "name": "odcid",
+    "type": "STRING"
+  },
+  {
+    "name": "peer",
+    "type": "STRING"
+  },
+  {
+    "name": "qlog",
+    "type": "STRING"
+  },
+  {
+    "name": "local_addr",
+    "type": "STRING"
+  },
+  {
+    "name": "remote_addr",
+    "type": "STRING"
+  },
+  {
+    "name": "quic_version",
+    "type": "STRING"
+  },
+  {
+    "name": "handshake_complete_time",
+    "type": "TIMESTAMP"
+  },
+  {
+    "name": "version_negotiation_versions",
+    "type": "STRING",
+    "mode": "REPEATED"
+  },
+  {
+    "name": "handshake_rtt",
+    "type": "RECORD",
+    "fields": [
+      {
+        "name": "min_rtt",
+        "type": "FLOAT",
+        "description": "in ms"
+      },
+      {
+        "name": "smoothed_rtt",
+        "type": "FLOAT",
+        "description": "in ms"
+      },
+      {
+        "name": "rtt_var",
+        "type": "FLOAT",
+        "description": "in ms"
+      }
+    ]
+  },
+  {
+    "name": "close_reason",
+    "type": "RECORD",
+    "fields": [
+      {
+        "name": "timeout",
+        "type": "STRING"
+      },
+      {
+        "name": "stateless_reset",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "version_negotiation",
+        "type": "BOOLEAN"
+      },
+      {
+        "name": "transport_error",
+        "type": "RECORD",
+        "fields": [
+          {
+            "name": "remote",
+            "type": "BOOLEAN"
+          },
+          {
+            "name": "error_code",
+            "type": "INTEGER"
+          },
+          {
+            "name": "reason_phrase",
+            "type": "STRING"
+          }
+        ]
+      },
+      {
+        "name": "application_error",
+        "type": "RECORD",
+        "fields": [
+          {
+            "name": "remote",
+            "type": "BOOLEAN"
+          },
+          {
+            "name": "error_code",
+            "type": "INTEGER"
+          },
+          {
+            "name": "reason_phrase",
+            "type": "STRING"
+          }
+        ]
+      },
+      {
+        "name": "error_message",
+        "type": "STRING"
+      }
+    ]
+  },
+  {
+    "name": "packets_sent",
+    "type": "RECORD",
+    "fields": [
+      {
+        "name": "initial",
+        "type": "INTEGER"
+      },
+      {
+        "name": "handshake",
+        "type": "INTEGER"
+      },
+            {
+        "name": "retry",
+        "type": "INTEGER"
+      },
+      {
+        "name": "zerortt",
+        "type": "INTEGER"
+      },
+      {
+        "name": "short",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "packets_received",
+     "type": "RECORD",
+    "fields": [
+      {
+        "name": "initial",
+        "type": "INTEGER"
+      },
+      {
+        "name": "handshake",
+        "type": "INTEGER"
+      },
+            {
+        "name": "retry",
+        "type": "INTEGER"
+      },
+      {
+        "name": "zerortt",
+        "type": "INTEGER"
+      },
+      {
+        "name": "short",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "packets_buffered",
+    "type": "INTEGER"
+  },
+  {
+    "name": "packets_dropped",
+    "type": "INTEGER"
+  },
+  {
+    "name": "packets_lost",
+     "type": "RECORD",
+    "fields": [
+      {
+        "name": "initial",
+        "type": "INTEGER"
+      },
+      {
+        "name": "handshake",
+        "type": "INTEGER"
+      },
+      {
+        "name": "zerortt",
+        "type": "INTEGER"
+      },
+      {
+        "name": "short",
+        "type": "INTEGER"
+      }
+    ]
+  },
+  {
+    "name": "last_rtt",
+    "type": "RECORD",
+    "fields": [
+      {
+        "name": "min_rtt",
+        "type": "FLOAT",
+        "description": "in ms"
+      },
+      {
+        "name": "smoothed_rtt",
+        "type": "FLOAT",
+        "description": "in ms"
+      },
+      {
+        "name": "rtt_var",
+        "type": "FLOAT",
+        "description": "in ms"
+      }
+    ]
+  },
+  {
+    "name": "pto_count",
+    "type": "INTEGER"
+  }
+]
