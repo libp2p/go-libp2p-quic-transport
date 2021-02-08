@@ -19,7 +19,6 @@ import (
 	tpt "github.com/libp2p/go-libp2p-core/transport"
 	p2ptls "github.com/libp2p/go-libp2p-tls"
 	"github.com/lucas-clemente/quic-go"
-	quiclogging "github.com/lucas-clemente/quic-go/logging"
 	ma "github.com/multiformats/go-multiaddr"
 	mafmt "github.com/multiformats/go-multiaddr-fmt"
 	manet "github.com/multiformats/go-multiaddr/net"
@@ -137,11 +136,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 	if err != nil {
 		return nil, err
 	}
-	tracers := []quiclogging.Tracer{&metricsTracer{}, newStatsTracer(peerID)}
-	if qlogTracer != nil {
-		tracers = append(tracers, qlogTracer)
-	}
-	config.Tracer = quiclogging.NewMultiplexedTracer(tracers...)
+	config.Tracer = newTracer(peerID)
 
 	return &transport{
 		privKey:      key,
