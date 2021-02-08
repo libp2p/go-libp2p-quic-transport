@@ -3,6 +3,7 @@ module github.com/libp2p/go-libp2p-quic-transport
 go 1.15
 
 require (
+	cloud.google.com/go/bigquery v1.8.0
 	github.com/golang/mock v1.5.0
 	github.com/ipfs/go-log v1.0.4
 	github.com/klauspost/compress v1.11.7
@@ -17,5 +18,5 @@ require (
 	github.com/onsi/gomega v1.10.1
 	github.com/prometheus/client_golang v1.9.0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
-	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
+	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 )
