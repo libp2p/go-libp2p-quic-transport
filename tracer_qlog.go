@@ -10,26 +10,12 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/lucas-clemente/quic-go/logging"
-	"github.com/lucas-clemente/quic-go/qlog"
 )
 
-var qlogTracer logging.Tracer
+var qlogDir string
 
 func init() {
-	if qlogDir := os.Getenv("QLOGDIR"); len(qlogDir) > 0 {
-		qlogTracer = initQlogger(qlogDir)
-	}
-}
-
-func initQlogger(qlogDir string) logging.Tracer {
-	return qlog.NewTracer(func(role logging.Perspective, connID []byte) io.WriteCloser {
-		// create the QLOGDIR, if it doesn't exist
-		if err := os.MkdirAll(qlogDir, 0o777); err != nil {
-			log.Errorf("creating the QLOGDIR failed: %s", err)
-			return nil
-		}
-		return newQlogger(qlogDir, role, connID)
-	})
+	qlogDir = os.Getenv("QLOGDIR")
 }
 
 // The qlogger logs qlog events to a temporary file: .<name>.qlog.swp.
@@ -42,7 +28,14 @@ type qlogger struct {
 	*bufio.Writer          // buffering the f
 }
 
-func newQlogger(qlogDir string, role logging.Perspective, connID []byte) io.WriteCloser {
+func newQlogger(role logging.Perspective, connID []byte) io.WriteCloser {
+	if len(qlogDir) == 0 {
+		return nil
+	}
+	if err := os.MkdirAll(qlogDir, 0o777); err != nil {
+		log.Errorf("creating the QLOGDIR failed: %s", err)
+		return nil
+	}
 	t := time.Now().UTC().Format("2006-01-02T15-04-05.999999999UTC")
 	r := "server"
 	if role == logging.PerspectiveClient {
