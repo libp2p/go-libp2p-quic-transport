@@ -172,6 +172,7 @@ type ConnectionStats struct {
 	PacketsBuffered, PacketsDropped, PTOCount int64
 	LastRTT, HandshakeRTT                     RTTMeasurement
 	CloseReason                               logging.CloseReason
+	Qlog                                      string
 }
 
 func (s *ConnectionStats) toBigQuery() *connectionStats {
@@ -227,6 +228,7 @@ func (s *ConnectionStats) toBigQuery() *connectionStats {
 		PacketsLost:                s.PacketsLost.toBigQuery(),
 		LastRTT:                    s.LastRTT.toBigQuery(),
 		CloseReason:                cr,
+		Qlog:                       bigquery.NullString{StringVal: s.Qlog, Valid: len(s.Qlog) > 0},
 	}
 }
 
