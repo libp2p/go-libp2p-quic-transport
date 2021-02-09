@@ -2,6 +2,9 @@ package libp2pquic
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
+	"math"
 	"net"
 
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -23,17 +26,32 @@ func (t *tracer) SentPacket(net.Addr, *logging.Header, logging.ByteCount, []logg
 func (t *tracer) DroppedPacket(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
 }
 func (t *tracer) TracerForConnection(ctx context.Context, p logging.Perspective, odcid logging.ConnectionID) logging.ConnectionTracer {
-	var tracers []logging.ConnectionTracer
-	if qlogWriter := newQlogger(p, odcid); qlogWriter != nil {
-		if q := qlog.NewConnectionTracer(qlogWriter, p, odcid); q != nil {
-			tracers = append(tracers, q)
+	var (
+		qlogPath string
+		tracers  []logging.ConnectionTracer
+	)
+
+	if t.shouldRecordQlog() {
+		qlogWriter := newQlogger(p, odcid)
+		if qlogWriter != nil {
+			qlogPath = qlogWriter.GetPath()
+			if q := qlog.NewConnectionTracer(qlogWriter, p, odcid); q != nil {
+				tracers = append(tracers, q)
+			}
 		}
 	}
-	if m := newStatsConnectionTracer(ctx, p, odcid, t.node); m != nil {
+	if m := newStatsConnectionTracer(ctx, p, odcid, t.node, qlogPath); m != nil {
 		tracers = append(tracers, m)
 	}
 	if len(tracers) == 0 {
 		return nil
 	}
 	return logging.NewMultiplexedConnectionTracer(tracers...)
+}
+
+// We only enable qlog on a fraction (50%) of the connections.
+func (t *tracer) shouldRecordQlog() bool {
+	b := make([]byte, 2)
+	rand.Read(b)
+	return binary.BigEndian.Uint16(b) > math.MaxUint16/2
 }

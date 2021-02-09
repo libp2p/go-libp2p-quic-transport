@@ -2,12 +2,13 @@ package metrics
 
 import (
 	"context"
-	"github.com/lucas-clemente/quic-go"
 	"log"
 	"net"
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"github.com/lucas-clemente/quic-go"
 
 	"cloud.google.com/go/bigquery"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -174,6 +175,7 @@ type ConnectionStats struct {
 	PacketsBuffered, PacketsDropped, PTOCount int64
 	LastRTT, HandshakeRTT                     RTTMeasurement
 	CloseError                                error
+	Qlog                                      string
 }
 
 func (s *ConnectionStats) toBigQuery() *connectionStats {
@@ -225,6 +227,7 @@ func (s *ConnectionStats) toBigQuery() *connectionStats {
 		PacketsLost:                s.PacketsLost.toBigQuery(),
 		LastRTT:                    s.LastRTT.toBigQuery(),
 		CloseReason:                cr,
+		Qlog:                       bigquery.NullString{StringVal: s.Qlog, Valid: len(s.Qlog) > 0},
 	}
 }
 

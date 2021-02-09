@@ -2,7 +2,10 @@ package libp2pquic
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -11,33 +14,17 @@ import (
 	"github.com/lucas-clemente/quic-go/logging"
 )
 
-type statsTracer struct {
-	node peer.ID
-}
-
-func newStatsTracer(peerID peer.ID) logging.Tracer {
-	return &statsTracer{node: peerID}
-}
-
-var _ logging.Tracer = &statsTracer{}
-
-func (t *statsTracer) TracerForConnection(ctx context.Context, p logging.Perspective, odcid logging.ConnectionID) logging.ConnectionTracer {
-	return newStatsConnectionTracer(ctx, p, odcid, t.node)
-}
-func (t *statsTracer) SentPacket(net.Addr, *logging.Header, logging.ByteCount, []logging.Frame) {}
-func (t *statsTracer) DroppedPacket(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
-}
-
 type statsConnectionTracer struct {
+	qlogPath string
 	metrics.ConnectionStats
 }
 
-func newStatsConnectionTracer(ctx context.Context, pers logging.Perspective, odcid logging.ConnectionID, node peer.ID) *statsConnectionTracer {
+func newStatsConnectionTracer(ctx context.Context, pers logging.Perspective, odcid logging.ConnectionID, node peer.ID, qlogPath string) *statsConnectionTracer {
 	var remotePeer peer.ID
 	if v := ctx.Value(dialTracingKey); v != nil {
 		remotePeer = v.(peer.ID)
 	}
-	t := &statsConnectionTracer{}
+	t := &statsConnectionTracer{qlogPath: qlogPath}
 	t.ConnectionStats.ODCID = odcid
 	t.ConnectionStats.Node = node
 	t.ConnectionStats.Perspective = pers
@@ -150,9 +137,28 @@ func (t *statsConnectionTracer) LossTimerCanceled()                             
 
 // Close is called when the connection is closed.
 func (t *statsConnectionTracer) Close() {
+	if len(t.qlogPath) > 0 {
+		qlog, err := t.saveQlog()
+		if err != nil {
+			log.Errorf("Error saving qlog: %s", err)
+		} else {
+			t.ConnectionStats.Qlog = qlog
+		}
+	}
+	if t.ConnectionStats.StartTime.IsZero() { // Close() called before StartedConnection()
+		return
+	}
 	if err := t.ConnectionStats.Save(); err != nil {
 		log.Errorf("Saving connection statistics failed: %s", err)
 	}
+}
+
+func (t *statsConnectionTracer) saveQlog() (string, error) {
+	f, err := os.Open(t.qlogPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open qlog file %s: %w", t.qlogPath, err)
+	}
+	return metrics.Upload(filepath.Base(f.Name()), f)
 }
 
 func (t *statsConnectionTracer) Debug(name, msg string) {}

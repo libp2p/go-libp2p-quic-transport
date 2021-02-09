@@ -28,7 +28,7 @@ type qlogger struct {
 	*bufio.Writer          // buffering the f
 }
 
-func newQlogger(role logging.Perspective, connID []byte) io.WriteCloser {
+func newQlogger(role logging.Perspective, connID []byte) *qlogger {
 	if len(qlogDir) == 0 {
 		return nil
 	}
@@ -81,4 +81,10 @@ func (l *qlogger) Close() error {
 		return err
 	}
 	return buf.Flush()
+}
+
+// GetPath returns the path of the qlog.
+// It is only valid after Close() has been called.
+func (l *qlogger) GetPath() string {
+	return l.filename
 }
