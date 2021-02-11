@@ -14,10 +14,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type nopCloser struct{}
-
-func (nopCloser) Close() error { return nil }
-
 var _ = Describe("qlogger", func() {
 	var qlogDir string
 
@@ -44,7 +40,7 @@ var _ = Describe("qlogger", func() {
 		logger := newQlogger(qlogDir, logging.PerspectiveServer, []byte{0xde, 0xad, 0xbe, 0xef})
 		file := getFile()
 		Expect(string(file.Name()[0])).To(Equal("."))
-		Expect(file.Name()).To(HaveSuffix(".qlog.zst.swp"))
+		Expect(file.Name()).To(HaveSuffix(".qlog.swp"))
 		// close the logger. This should move the file.
 		Expect(logger.Close()).To(Succeed())
 		file = getFile()
@@ -77,9 +73,9 @@ var _ = Describe("qlogger", func() {
 		compressed, err := ioutil.ReadFile(qlogDir + "/" + getFile().Name())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(compressed).ToNot(Equal("foobar"))
-		gz, err := zstd.NewReader(bytes.NewReader(compressed))
+		c, err := zstd.NewReader(bytes.NewReader(compressed))
 		Expect(err).ToNot(HaveOccurred())
-		data, err := ioutil.ReadAll(gz)
+		data, err := ioutil.ReadAll(c)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal([]byte("foobar")))
 	})
