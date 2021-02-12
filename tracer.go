@@ -37,10 +37,14 @@ func initQlogger(qlogDir string) logging.Tracer {
 	})
 }
 
+// The qlogger logs qlog events to a temporary file: .<name>.qlog.swp.
+// When it is closed, it compresses the temporary file and saves it as <name>.qlog.zst.
+// It is not possible to compress on the fly, as compression algorithms keep a lot of internal state,
+// which can easily exhaust the host system's memory when running a few hundred QUIC connections in parallel.
 type qlogger struct {
-	f        *os.File // QLOGDIR/.log_xxx.qlog.gz.swp
-	filename string   // QLOGDIR/log_xxx.qlog.gz
-	io.WriteCloser
+	f             *os.File // QLOGDIR/.log_xxx.qlog.swp
+	filename      string   // QLOGDIR/log_xxx.qlog.zst
+	*bufio.Writer          // buffering the f
 }
 
 func newQlogger(qlogDir string, role logging.Perspective, connID []byte) io.WriteCloser {
@@ -50,50 +54,43 @@ func newQlogger(qlogDir string, role logging.Perspective, connID []byte) io.Writ
 		r = "client"
 	}
 	finalFilename := fmt.Sprintf("%s%clog_%s_%s_%x.qlog.zst", qlogDir, os.PathSeparator, t, r, connID)
-	filename := fmt.Sprintf("%s%c.log_%s_%s_%x.qlog.zst.swp", qlogDir, os.PathSeparator, t, r, connID)
+	filename := fmt.Sprintf("%s%c.log_%s_%s_%x.qlog.swp", qlogDir, os.PathSeparator, t, r, connID)
 	f, err := os.Create(filename)
 	if err != nil {
 		log.Errorf("unable to create qlog file %s: %s", filename, err)
 		return nil
 	}
-	gz, err := zstd.NewWriter(f, zstd.WithEncoderLevel(zstd.SpeedFastest))
-	if err != nil {
-		log.Errorf("failed to initialize zstd: %s", err)
-		return nil
-	}
 	return &qlogger{
-		f:           f,
-		filename:    finalFilename,
-		WriteCloser: newBufferedWriteCloser(bufio.NewWriter(gz), gz),
+		f:        f,
+		filename: finalFilename,
+		Writer:   bufio.NewWriter(f),
 	}
 }
 
 func (l *qlogger) Close() error {
-	if err := l.WriteCloser.Close(); err != nil {
+	defer os.Remove(l.f.Name())
+	defer l.f.Close()
+	if err := l.Writer.Flush(); err != nil {
 		return err
 	}
-	path := l.f.Name()
-	if err := l.f.Close(); err != nil {
+	if _, err := l.f.Seek(0, io.SeekStart); err != nil { // set the read position to the beginning of the file
 		return err
 	}
-	return os.Rename(path, l.filename)
-}
-
-type bufferedWriteCloser struct {
-	*bufio.Writer
-	io.Closer
-}
-
-func newBufferedWriteCloser(writer *bufio.Writer, closer io.Closer) io.WriteCloser {
-	return &bufferedWriteCloser{
-		Writer: writer,
-		Closer: closer,
-	}
-}
-
-func (h bufferedWriteCloser) Close() error {
-	if err := h.Writer.Flush(); err != nil {
+	f, err := os.Create(l.filename)
+	if err != nil {
 		return err
 	}
-	return h.Closer.Close()
+	defer f.Close()
+	buf := bufio.NewWriter(f)
+	c, err := zstd.NewWriter(buf, zstd.WithEncoderLevel(zstd.SpeedFastest))
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(c, l.f); err != nil {
+		return err
+	}
+	if err := c.Close(); err != nil {
+		return err
+	}
+	return buf.Flush()
 }
