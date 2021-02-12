@@ -68,6 +68,8 @@ func newQlogger(qlogDir string, role logging.Perspective, connID []byte) io.Writ
 }
 
 func (l *qlogger) Close() error {
+	defer os.Remove(l.f.Name())
+	defer l.f.Close()
 	if err := l.Writer.Flush(); err != nil {
 		return err
 	}
@@ -78,6 +80,7 @@ func (l *qlogger) Close() error {
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 	buf := bufio.NewWriter(f)
 	c, err := zstd.NewWriter(buf, zstd.WithEncoderLevel(zstd.SpeedFastest))
 	if err != nil {
@@ -89,14 +92,5 @@ func (l *qlogger) Close() error {
 	if err := c.Close(); err != nil {
 		return err
 	}
-	if err := buf.Flush(); err != nil {
-		return err
-	}
-	if err := l.f.Close(); err != nil {
-		return err
-	}
-	if err := os.Remove(l.f.Name()); err != nil {
-		return err
-	}
-	return f.Close()
+	return buf.Flush()
 }
