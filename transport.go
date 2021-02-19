@@ -1,11 +1,15 @@
 package libp2pquic
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
+	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p-core/connmgr"
 	n "github.com/libp2p/go-libp2p-core/network"
@@ -26,6 +30,8 @@ import (
 )
 
 var log = logging.Logger("quic-transport")
+
+var ErrHolePunching = errors.New("hole punching attempted; no active dial")
 
 var quicDialContext = quic.DialContext // so we can mock it in tests
 
@@ -96,9 +102,17 @@ type transport struct {
 	serverConfig *quic.Config
 	clientConfig *quic.Config
 	gater        connmgr.ConnectionGater
+
+	holePunchingMx sync.Mutex
+	holePunching   map[string]activeHolePunch
 }
 
 var _ tpt.Transport = &transport{}
+
+type activeHolePunch struct {
+	connCh chan tpt.CapableConn
+	ctx    context.Context
+}
 
 // NewTransport creates a new QUIC transport
 func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (tpt.Transport, error) {
@@ -138,6 +152,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 		serverConfig: config,
 		clientConfig: config.Clone(),
 		gater:        gater,
+		holePunching: make(map[string]activeHolePunch),
 	}, nil
 }
 
@@ -156,6 +171,13 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		return nil, err
 	}
 	tlsConf, keyCh := t.identity.ConfigForPeer(p)
+
+	if simConnect, _ := n.GetSimultaneousConnect(ctx); simConnect {
+		if bytes.Compare([]byte(t.localPeer), []byte(p)) < 0 {
+			return t.holePunch(ctx, network, addr)
+		}
+	}
+
 	pconn, err := t.connManager.Dial(network, addr)
 	if err != nil {
 		return nil, err
@@ -200,6 +222,53 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		return nil, fmt.Errorf("secured connection gated")
 	}
 	return conn, nil
+}
+
+func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDPAddr) (tpt.CapableConn, error) {
+	pconn, err := t.connManager.Dial(network, addr)
+	if err != nil {
+		return nil, err
+	}
+	defer pconn.DecreaseCount()
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	connCh := make(chan tpt.CapableConn)
+
+	key := addr.String()
+	t.holePunchingMx.Lock()
+	t.holePunching[key] = activeHolePunch{connCh: connCh, ctx: ctx}
+	t.holePunchingMx.Unlock()
+
+	defer func() {
+		t.holePunchingMx.Lock()
+		delete(t.holePunching, key)
+		t.holePunchingMx.Unlock()
+	}()
+
+	payload := make([]byte, 64)
+	for i := 0; ; i++ {
+		if _, err := rand.Read(payload); err != nil {
+			return nil, err
+		}
+		if _, err := pconn.UDPConn.WriteToUDP(payload, addr); err != nil {
+			return nil, err
+		}
+
+		maxSleep := 10 * (i + 1) * (i + 1) // in ms
+		if maxSleep > 200 {
+			maxSleep = 200
+		}
+		sleep := 10*time.Millisecond + time.Duration(rand.Intn(maxSleep))*time.Millisecond
+		select {
+		case c := <-connCh:
+			return c, nil
+		case <-time.After(sleep):
+		case <-ctx.Done():
+			return nil, ErrHolePunching
+		}
+	}
 }
 
 // Don't use mafmt.QUIC as we don't want to dial DNS addresses. Just /ip{4,6}/udp/quic
