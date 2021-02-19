@@ -6,7 +6,7 @@ require (
 	github.com/golang/mock v1.4.4
 	github.com/ipfs/go-log v1.0.4
 	github.com/klauspost/compress v1.11.7
-	github.com/libp2p/go-libp2p-core v0.8.0
+	github.com/libp2p/go-libp2p-core v0.8.5
 	github.com/libp2p/go-libp2p-tls v0.1.3
 	github.com/libp2p/go-netroute v0.1.3
 	github.com/lucas-clemente/quic-go v0.19.3
