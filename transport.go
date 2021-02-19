@@ -1,11 +1,14 @@
 package libp2pquic
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
+	"time"
 
 	"github.com/libp2p/go-libp2p-core/connmgr"
 	n "github.com/libp2p/go-libp2p-core/network"
@@ -15,6 +18,7 @@ import (
 
 	logging "github.com/ipfs/go-log"
 	ic "github.com/libp2p/go-libp2p-core/crypto"
+	in "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/pnet"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
@@ -151,15 +155,28 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
+
 	remoteMultiaddr, err := toQuicMultiaddr(addr)
 	if err != nil {
 		return nil, err
 	}
 	tlsConf, keyCh := t.identity.ConfigForPeer(p)
+
+	if simConnect, _ := in.GetSimultaneousConnect(ctx); simConnect {
+		if bytes.Compare([]byte(t.localPeer), []byte(p)) < 0 {
+			err = t.holePunch(network, addr)
+			if err == nil {
+				err = errors.New("hole punching attempted; no active dial")
+			}
+			return nil, err
+		}
+	}
+
 	pconn, err := t.connManager.Dial(network, addr)
 	if err != nil {
 		return nil, err
 	}
+
 	sess, err := quicDialContext(ctx, pconn, addr, host, tlsConf, t.clientConfig)
 	if err != nil {
 		pconn.DecreaseCount()
@@ -200,6 +217,37 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		return nil, fmt.Errorf("secured connection gated")
 	}
 	return conn, nil
+}
+
+func (t *transport) holePunch(network string, addr *net.UDPAddr) error {
+	pconn, err := t.connManager.Dial(network, addr)
+	if err != nil {
+		return err
+	}
+	defer pconn.DecreaseCount()
+
+	conn := pconn.UDPConn
+
+	payload := make([]byte, 64)
+	_, err = rand.Read(payload)
+	if err != nil {
+		return err
+	}
+
+	_, err = conn.WriteToUDP(payload, addr)
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < 10; i++ {
+		time.Sleep(time.Duration(rand.Intn(i * int(10*time.Millisecond))))
+		_, err := conn.WriteToUDP(payload, addr)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Don't use mafmt.QUIC as we don't want to dial DNS addresses. Just /ip{4,6}/udp/quic
