@@ -32,6 +32,8 @@ import (
 
 var log = logging.Logger("quic-transport")
 
+var ErrHolePunching = errors.New("hole punching attempted; no active dial")
+
 var quicDialContext = quic.DialContext // so we can mock it in tests
 
 var quicConfig = &quic.Config{
@@ -170,7 +172,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		if bytes.Compare([]byte(t.localPeer), []byte(p)) < 0 {
 			err = t.holePunch(ctx, p, network, addr)
 			if err == nil {
-				err = errors.New("hole punching attempted; no active dial")
+				err = ErrHolePunching
 			}
 			return nil, err
 		}
