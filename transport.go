@@ -105,7 +105,7 @@ type transport struct {
 	gater        connmgr.ConnectionGater
 
 	holePunchingMx sync.Mutex
-	holePunching   map[peer.ID]map[*net.UDPAddr]context.CancelFunc
+	holePunching   map[string]context.CancelFunc
 }
 
 var _ tpt.Transport = &transport{}
@@ -148,7 +148,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 		serverConfig: config,
 		clientConfig: config.Clone(),
 		gater:        gater,
-		holePunching: make(map[peer.ID]map[*net.UDPAddr]context.CancelFunc),
+		holePunching: make(map[string]context.CancelFunc),
 	}, nil
 }
 
@@ -233,23 +233,19 @@ func (t *transport) holePunch(ctx context.Context, p peer.ID, network string, ad
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 
+	hpkey := addr.String()
 	t.holePunchingMx.Lock()
-	holePunches, ok := t.holePunching[p]
-	if !ok {
-		holePunches = make(map[*net.UDPAddr]context.CancelFunc)
-		t.holePunching[p] = holePunches
-	}
-	holePunches[addr] = cancel
+	t.holePunching[hpkey] = cancel
 	t.holePunchingMx.Unlock()
 
 	defer func() {
 		t.holePunchingMx.Lock()
 		defer t.holePunchingMx.Unlock()
 
-		holePunches, ok := t.holePunching[p]
+		_, ok := t.holePunching[hpkey]
 		if ok {
 			cancel()
-			delete(holePunches, addr)
+			delete(t.holePunching, hpkey)
 		}
 	}()
 

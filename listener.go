@@ -79,6 +79,16 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 }
 
 func (l *listener) setupConn(sess quic.Session) (*conn, error) {
+	// cancel active hole punching if any
+	hpkey := sess.RemoteAddr().String()
+	l.transport.holePunchingMx.Lock()
+	cancel, ok := l.transport.holePunching[hpkey]
+	if ok {
+		cancel()
+		delete(l.transport.holePunching, hpkey)
+	}
+	l.transport.holePunchingMx.Unlock()
+
 	// The tls.Config used to establish this connection already verified the certificate chain.
 	// Since we don't have any way of knowing which tls.Config was used though,
 	// we have to re-determine the peer's identity here.
@@ -92,17 +102,6 @@ func (l *listener) setupConn(sess quic.Session) (*conn, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// cancel all active hole punches
-	l.transport.holePunchingMx.Lock()
-	holePunches, ok := l.transport.holePunching[remotePeerID]
-	if ok {
-		for _, cancel := range holePunches {
-			cancel()
-		}
-		delete(l.transport.holePunching, remotePeerID)
-	}
-	l.transport.holePunchingMx.Unlock()
 
 	remoteMultiaddr, err := toQuicMultiaddr(sess.RemoteAddr())
 	if err != nil {
