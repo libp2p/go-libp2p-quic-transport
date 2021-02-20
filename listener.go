@@ -85,7 +85,6 @@ func (l *listener) setupConn(sess quic.Session) (*conn, error) {
 	cancel, ok := l.transport.holePunching[hpkey]
 	if ok {
 		cancel()
-		delete(l.transport.holePunching, hpkey)
 	}
 	l.transport.holePunchingMx.Unlock()
 

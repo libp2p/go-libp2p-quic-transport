@@ -232,6 +232,7 @@ func (t *transport) holePunch(ctx context.Context, p peer.ID, network string, ad
 	defer pconn.DecreaseCount()
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
 
 	hpkey := addr.String()
 	t.holePunchingMx.Lock()
@@ -240,13 +241,8 @@ func (t *transport) holePunch(ctx context.Context, p peer.ID, network string, ad
 
 	defer func() {
 		t.holePunchingMx.Lock()
-		defer t.holePunchingMx.Unlock()
-
-		_, ok := t.holePunching[hpkey]
-		if ok {
-			cancel()
-			delete(t.holePunching, hpkey)
-		}
+		delete(t.holePunching, hpkey)
+		t.holePunchingMx.Unlock()
 	}()
 
 	conn := pconn.UDPConn
