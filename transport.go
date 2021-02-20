@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/connmgr"
@@ -100,6 +101,9 @@ type transport struct {
 	serverConfig *quic.Config
 	clientConfig *quic.Config
 	gater        connmgr.ConnectionGater
+
+	holePunchingMx sync.Mutex
+	holePunching   map[peer.ID]map[*net.UDPAddr]context.CancelFunc
 }
 
 var _ tpt.Transport = &transport{}
@@ -142,6 +146,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 		serverConfig: config,
 		clientConfig: config.Clone(),
 		gater:        gater,
+		holePunching: make(map[peer.ID]map[*net.UDPAddr]context.CancelFunc),
 	}, nil
 }
 
@@ -155,7 +160,6 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-
 	remoteMultiaddr, err := toQuicMultiaddr(addr)
 	if err != nil {
 		return nil, err
@@ -164,7 +168,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 
 	if simConnect, _ := in.GetSimultaneousConnect(ctx); simConnect {
 		if bytes.Compare([]byte(t.localPeer), []byte(p)) < 0 {
-			err = t.holePunch(network, addr)
+			err = t.holePunch(ctx, p, network, addr)
 			if err == nil {
 				err = errors.New("hole punching attempted; no active dial")
 			}
@@ -176,7 +180,6 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-
 	sess, err := quicDialContext(ctx, pconn, addr, host, tlsConf, t.clientConfig)
 	if err != nil {
 		pconn.DecreaseCount()
@@ -219,31 +222,54 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	return conn, nil
 }
 
-func (t *transport) holePunch(network string, addr *net.UDPAddr) error {
+func (t *transport) holePunch(ctx context.Context, p peer.ID, network string, addr *net.UDPAddr) error {
 	pconn, err := t.connManager.Dial(network, addr)
 	if err != nil {
 		return err
 	}
 	defer pconn.DecreaseCount()
 
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+
+	t.holePunchingMx.Lock()
+	holePunches, ok := t.holePunching[p]
+	if !ok {
+		holePunches = make(map[*net.UDPAddr]context.CancelFunc)
+		t.holePunching[p] = holePunches
+	}
+	holePunches[addr] = cancel
+	t.holePunchingMx.Unlock()
+
+	defer func() {
+		t.holePunchingMx.Lock()
+		defer t.holePunchingMx.Unlock()
+
+		holePunches, ok := t.holePunching[p]
+		if ok {
+			cancel()
+			delete(holePunches, addr)
+		}
+	}()
+
 	conn := pconn.UDPConn
-
 	payload := make([]byte, 64)
-	_, err = rand.Read(payload)
-	if err != nil {
-		return err
-	}
 
-	_, err = conn.WriteToUDP(payload, addr)
-	if err != nil {
-		return err
-	}
-
-	for i := 0; i < 10; i++ {
-		time.Sleep(time.Duration(rand.Intn(i * int(10*time.Millisecond))))
-		_, err := conn.WriteToUDP(payload, addr)
+	for i := 0; true; i++ {
+		_, err = rand.Read(payload)
 		if err != nil {
 			return err
+		}
+
+		_, err = conn.WriteToUDP(payload, addr)
+		if err != nil {
+			return err
+		}
+
+		sleep := 10*time.Millisecond + time.Duration(rand.Intn((i+1)*int(10*time.Millisecond)))
+		select {
+		case <-time.After(sleep):
+		case <-ctx.Done():
+			return nil
 		}
 	}
 

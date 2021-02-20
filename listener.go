@@ -92,6 +92,18 @@ func (l *listener) setupConn(sess quic.Session) (*conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// cancel all active hole punches
+	l.transport.holePunchingMx.Lock()
+	holePunches, ok := l.transport.holePunching[remotePeerID]
+	if ok {
+		for _, cancel := range holePunches {
+			cancel()
+		}
+		delete(l.transport.holePunching, remotePeerID)
+	}
+	l.transport.holePunchingMx.Unlock()
+
 	remoteMultiaddr, err := toQuicMultiaddr(sess.RemoteAddr())
 	if err != nil {
 		return nil, err
