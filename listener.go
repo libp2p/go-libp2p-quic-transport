@@ -6,7 +6,7 @@ import (
 	"net"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
-	n "github.com/libp2p/go-libp2p-core/network"
+	cn "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
 
@@ -79,6 +79,7 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 }
 
 func (l *listener) setupConn(sess quic.Session) (*conn, error) {
+	hp := false
 	// cancel active hole punching if any
 	hpkey := sess.RemoteAddr().String()
 	l.transport.holePunchingMx.Lock()
@@ -86,6 +87,7 @@ func (l *listener) setupConn(sess quic.Session) (*conn, error) {
 	if ok {
 		cancel()
 	}
+	hp = true
 	l.transport.holePunchingMx.Unlock()
 
 	// The tls.Config used to establish this connection already verified the certificate chain.
@@ -107,6 +109,12 @@ func (l *listener) setupConn(sess quic.Session) (*conn, error) {
 		return nil, err
 	}
 
+	var stat cn.Stat
+	if hp {
+		stat.Extra = make(map[interface{}]interface{})
+		stat.Extra["hpcancel"] = struct{}{}
+	}
+
 	return &conn{
 		sess:            sess,
 		transport:       l.transport,
@@ -116,6 +124,7 @@ func (l *listener) setupConn(sess quic.Session) (*conn, error) {
 		remoteMultiaddr: remoteMultiaddr,
 		remotePeerID:    remotePeerID,
 		remotePubKey:    remotePubKey,
+		stat:            stat,
 	}, nil
 }
 

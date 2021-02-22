@@ -5,6 +5,7 @@ import (
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/mux"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
 
@@ -23,9 +24,16 @@ type conn struct {
 	remotePeerID    peer.ID
 	remotePubKey    ic.PubKey
 	remoteMultiaddr ma.Multiaddr
+
+	stat network.Stat
 }
 
 var _ tpt.CapableConn = &conn{}
+var _ network.ConnStat = (*conn)(nil)
+
+func (c *conn) Stat() network.Stat {
+	return c.stat
+}
 
 func (c *conn) Close() error {
 	return c.sess.CloseWithError(0, "")
