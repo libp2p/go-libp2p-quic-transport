@@ -259,7 +259,11 @@ func (t *transport) holePunch(ctx context.Context, p peer.ID, network string, ad
 			return err
 		}
 
-		sleep := 10*time.Millisecond + time.Duration(rand.Intn((i+1)*int(10*time.Millisecond)))
+		maxSleep := time.Duration((i+1)*(i+1)) * 10 * time.Millisecond
+		if maxSleep > 200*time.Millisecond {
+			maxSleep = 200 * time.Millisecond
+		}
+		sleep := 10*time.Millisecond + time.Duration(rand.Intn(int(maxSleep)))
 		select {
 		case <-time.After(sleep):
 		case <-ctx.Done():
