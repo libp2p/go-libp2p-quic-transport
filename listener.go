@@ -3,6 +3,7 @@ package libp2pquic
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
@@ -70,7 +71,7 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 			sess.CloseWithError(0, err.Error())
 			continue
 		}
-		if l.transport.gater != nil && !(l.transport.gater.InterceptAccept(conn) && l.transport.gater.InterceptSecured(n.DirInbound, conn.remotePeerID, conn)) {
+		if l.transport.gater != nil && !(l.transport.gater.InterceptAccept(conn) && l.transport.gater.InterceptSecured(cn.DirInbound, conn.remotePeerID, conn)) {
 			sess.CloseWithError(errorCodeConnectionGating, "connection gated")
 			continue
 		}
@@ -88,6 +89,7 @@ func (l *listener) setupConn(sess quic.Session) (*conn, error) {
 		cancel()
 	}
 	hp = true
+	fmt.Printf("\n cancelled sending UDP packets to %s because we see an incoming connection for it", sess.RemoteAddr())
 	l.transport.holePunchingMx.Unlock()
 
 	// The tls.Config used to establish this connection already verified the certificate chain.
