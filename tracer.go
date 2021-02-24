@@ -82,7 +82,7 @@ func (l *qlogger) Close() error {
 	}
 	defer f.Close()
 	buf := bufio.NewWriter(f)
-	c, err := zstd.NewWriter(buf, zstd.WithEncoderLevel(zstd.SpeedFastest))
+	c, err := zstd.NewWriter(buf, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithWindowSize(32*1024))
 	if err != nil {
 		return err
 	}
