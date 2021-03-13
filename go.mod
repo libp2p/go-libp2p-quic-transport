@@ -15,6 +15,7 @@ require (
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
 	github.com/onsi/ginkgo v1.14.0
 	github.com/onsi/gomega v1.10.1
+	github.com/prometheus/client_golang v1.9.0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 )
