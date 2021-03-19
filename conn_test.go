@@ -195,7 +195,7 @@ var _ = Describe("Connection", func() {
 		// now allow the address and make sure the connection goes through
 		cg.EXPECT().InterceptAccept(gomock.Any()).Return(true)
 		cg.EXPECT().InterceptSecured(gomock.Any(), gomock.Any(), gomock.Any()).Return(true)
-		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
+		clientTransport.(*transport).clientConfig.HandshakeIdleTimeout = 2 * time.Second
 		conn, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
 		defer conn.Close()
@@ -221,7 +221,7 @@ var _ = Describe("Connection", func() {
 
 		// now allow the peerId and make sure the connection goes through
 		cg.EXPECT().InterceptSecured(gomock.Any(), gomock.Any(), gomock.Any()).Return(true)
-		clientTransport.(*transport).clientConfig.HandshakeTimeout = 2 * time.Second
+		clientTransport.(*transport).clientConfig.HandshakeIdleTimeout = 2 * time.Second
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
 		conn.Close()

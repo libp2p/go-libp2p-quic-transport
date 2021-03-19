@@ -10,14 +10,13 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/lucas-clemente/quic-go/logging"
-	"github.com/lucas-clemente/quic-go/metrics"
 	"github.com/lucas-clemente/quic-go/qlog"
 )
 
 var tracer logging.Tracer
 
 func init() {
-	tracers := []logging.Tracer{metrics.NewTracer()}
+	tracers := []logging.Tracer{}
 	if qlogDir := os.Getenv("QLOGDIR"); len(qlogDir) > 0 {
 		if qlogger := initQlogger(qlogDir); qlogger != nil {
 			tracers = append(tracers, qlogger)

@@ -83,7 +83,7 @@ func (l *listener) setupConn(sess quic.Session) (*conn, error) {
 	// Since we don't have any way of knowing which tls.Config was used though,
 	// we have to re-determine the peer's identity here.
 	// Therefore, this is expected to never fail.
-	remotePubKey, err := p2ptls.PubKeyFromCertChain(sess.ConnectionState().PeerCertificates)
+	remotePubKey, err := p2ptls.PubKeyFromCertChain(sess.ConnectionState().TLS.PeerCertificates)
 	if err != nil {
 		return nil, err
 	}
