@@ -5,7 +5,7 @@ jobs:
     strategy:
       matrix:
         os: [ "ubuntu", "windows", "macos" ]
-        go: [ "1.14", "1.15" ]
+        go: [ "1.15.x", "1.16.x" ]
     runs-on: ${{ matrix.os }}-latest
     name: Unit tests (${{ matrix.os}}, Go ${{ matrix.go }})
     steps:

@@ -30,10 +30,10 @@ var log = logging.Logger("quic-transport")
 var quicDialContext = quic.DialContext // so we can mock it in tests
 
 var quicConfig = &quic.Config{
-	MaxIncomingStreams:                    1000,
-	MaxIncomingUniStreams:                 -1,             // disable unidirectional streams
-	MaxReceiveStreamFlowControlWindow:     10 * (1 << 20), // 10 MB
-	MaxReceiveConnectionFlowControlWindow: 15 * (1 << 20), // 15 MB
+	MaxIncomingStreams:         1000,
+	MaxIncomingUniStreams:      -1,             // disable unidirectional streams
+	MaxStreamReceiveWindow:     10 * (1 << 20), // 10 MB
+	MaxConnectionReceiveWindow: 15 * (1 << 20), // 15 MB
 	AcceptToken: func(clientAddr net.Addr, _ *quic.Token) bool {
 		// TODO(#6): require source address validation when under load
 		return true

@@ -14,30 +14,30 @@ import (
 	multiaddr "github.com/multiformats/go-multiaddr"
 )
 
-// MockConnectionGater is a mock of ConnectionGater interface
+// MockConnectionGater is a mock of ConnectionGater interface.
 type MockConnectionGater struct {
 	ctrl     *gomock.Controller
 	recorder *MockConnectionGaterMockRecorder
 }
 
-// MockConnectionGaterMockRecorder is the mock recorder for MockConnectionGater
+// MockConnectionGaterMockRecorder is the mock recorder for MockConnectionGater.
 type MockConnectionGaterMockRecorder struct {
 	mock *MockConnectionGater
 }
 
-// NewMockConnectionGater creates a new mock instance
+// NewMockConnectionGater creates a new mock instance.
 func NewMockConnectionGater(ctrl *gomock.Controller) *MockConnectionGater {
 	mock := &MockConnectionGater{ctrl: ctrl}
 	mock.recorder = &MockConnectionGaterMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockConnectionGater) EXPECT() *MockConnectionGaterMockRecorder {
 	return m.recorder
 }
 
-// InterceptAccept mocks base method
+// InterceptAccept mocks base method.
 func (m *MockConnectionGater) InterceptAccept(arg0 network.ConnMultiaddrs) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InterceptAccept", arg0)
@@ -45,13 +45,13 @@ func (m *MockConnectionGater) InterceptAccept(arg0 network.ConnMultiaddrs) bool 
 	return ret0
 }
 
-// InterceptAccept indicates an expected call of InterceptAccept
+// InterceptAccept indicates an expected call of InterceptAccept.
 func (mr *MockConnectionGaterMockRecorder) InterceptAccept(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InterceptAccept", reflect.TypeOf((*MockConnectionGater)(nil).InterceptAccept), arg0)
 }
 
-// InterceptAddrDial mocks base method
+// InterceptAddrDial mocks base method.
 func (m *MockConnectionGater) InterceptAddrDial(arg0 peer.ID, arg1 multiaddr.Multiaddr) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InterceptAddrDial", arg0, arg1)
@@ -59,13 +59,13 @@ func (m *MockConnectionGater) InterceptAddrDial(arg0 peer.ID, arg1 multiaddr.Mul
 	return ret0
 }
 
-// InterceptAddrDial indicates an expected call of InterceptAddrDial
+// InterceptAddrDial indicates an expected call of InterceptAddrDial.
 func (mr *MockConnectionGaterMockRecorder) InterceptAddrDial(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InterceptAddrDial", reflect.TypeOf((*MockConnectionGater)(nil).InterceptAddrDial), arg0, arg1)
 }
 
-// InterceptPeerDial mocks base method
+// InterceptPeerDial mocks base method.
 func (m *MockConnectionGater) InterceptPeerDial(arg0 peer.ID) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InterceptPeerDial", arg0)
@@ -73,13 +73,13 @@ func (m *MockConnectionGater) InterceptPeerDial(arg0 peer.ID) bool {
 	return ret0
 }
 
-// InterceptPeerDial indicates an expected call of InterceptPeerDial
+// InterceptPeerDial indicates an expected call of InterceptPeerDial.
 func (mr *MockConnectionGaterMockRecorder) InterceptPeerDial(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InterceptPeerDial", reflect.TypeOf((*MockConnectionGater)(nil).InterceptPeerDial), arg0)
 }
 
-// InterceptSecured mocks base method
+// InterceptSecured mocks base method.
 func (m *MockConnectionGater) InterceptSecured(arg0 network.Direction, arg1 peer.ID, arg2 network.ConnMultiaddrs) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InterceptSecured", arg0, arg1, arg2)
@@ -87,13 +87,13 @@ func (m *MockConnectionGater) InterceptSecured(arg0 network.Direction, arg1 peer
 	return ret0
 }
 
-// InterceptSecured indicates an expected call of InterceptSecured
+// InterceptSecured indicates an expected call of InterceptSecured.
 func (mr *MockConnectionGaterMockRecorder) InterceptSecured(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InterceptSecured", reflect.TypeOf((*MockConnectionGater)(nil).InterceptSecured), arg0, arg1, arg2)
 }
 
-// InterceptUpgraded mocks base method
+// InterceptUpgraded mocks base method.
 func (m *MockConnectionGater) InterceptUpgraded(arg0 network.Conn) (bool, control.DisconnectReason) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InterceptUpgraded", arg0)
@@ -102,7 +102,7 @@ func (m *MockConnectionGater) InterceptUpgraded(arg0 network.Conn) (bool, contro
 	return ret0, ret1
 }
 
-// InterceptUpgraded indicates an expected call of InterceptUpgraded
+// InterceptUpgraded indicates an expected call of InterceptUpgraded.
 func (mr *MockConnectionGaterMockRecorder) InterceptUpgraded(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InterceptUpgraded", reflect.TypeOf((*MockConnectionGater)(nil).InterceptUpgraded), arg0)
