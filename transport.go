@@ -42,6 +42,10 @@ var quicConfig = &quic.Config{
 	Versions:  []quic.VersionNumber{quic.VersionDraft29, quic.VersionDraft32},
 }
 
+func SetQUICConfig(config *quic.Config) {
+	quicConfig = config
+}
+
 const statelessResetKeyInfo = "libp2p quic stateless reset key"
 const errorCodeConnectionGating = 0x47415445 // GATE in ASCII
 
