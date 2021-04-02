@@ -88,7 +88,7 @@ func init() {
 
 	closedConns = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "quic_closed_connections",
+			Name: "quic_connections_closed_total",
 			Help: "closed QUIC connection",
 		},
 		[]string{direction},
@@ -96,7 +96,7 @@ func init() {
 	prometheus.MustRegister(closedConns)
 	newConns = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "quic_new_connections",
+			Name: "quic_connections_new_total",
 			Help: "new QUIC connection",
 		},
 		[]string{direction, "handshake_successful"},
@@ -104,7 +104,7 @@ func init() {
 	prometheus.MustRegister(newConns)
 	bytesTransferred = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "quic_bytes_transferred",
+			Name: "quic_transferred_bytes",
 			Help: "QUIC bytes transferred",
 		},
 		[]string{direction}, // TODO: this is confusing. Other times, we use direction for the perspective
@@ -112,7 +112,7 @@ func init() {
 	prometheus.MustRegister(bytesTransferred)
 	sentPackets = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "quic_sent_packets",
+			Name: "quic_packets_sent_total",
 			Help: "QUIC packets sent",
 		},
 		[]string{encLevel},
@@ -120,7 +120,7 @@ func init() {
 	prometheus.MustRegister(sentPackets)
 	rcvdPackets = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "quic_rcvd_packets",
+			Name: "quic_packets_rcvd_total",
 			Help: "QUIC packets received",
 		},
 		[]string{encLevel},
@@ -128,7 +128,7 @@ func init() {
 	prometheus.MustRegister(rcvdPackets)
 	bufferedPackets = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "quic_buffered_packets",
+			Name: "quic_packets_buffered_total",
 			Help: "Buffered packets",
 		},
 		[]string{"packet_type"},
@@ -136,7 +136,7 @@ func init() {
 	prometheus.MustRegister(bufferedPackets)
 	droppedPackets = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "quic_dropped_packets",
+			Name: "quic_packets_dropped_total",
 			Help: "Dropped packets",
 		},
 		[]string{"packet_type", "reason"},
@@ -144,7 +144,7 @@ func init() {
 	prometheus.MustRegister(droppedPackets)
 	connErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "quic_conn_errors",
+			Name: "quic_connection_errors",
 			Help: "QUIC connection errors",
 		},
 		[]string{"side", "error_code"},
@@ -152,7 +152,7 @@ func init() {
 	prometheus.MustRegister(connErrors)
 	lostPackets = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "quic_lost_packets",
+			Name: "quic_packets_lost_total",
 			Help: "QUIC lost received",
 		},
 		[]string{encLevel, "reason"},
