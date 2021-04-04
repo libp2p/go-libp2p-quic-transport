@@ -27,6 +27,7 @@ type aggregatingCollector struct {
 	conns         map[string] /* conn ID */ *metricsConnTracer
 	rtts          prometheus.Histogram
 	connDurations prometheus.Histogram
+	lossRate      prometheus.Histogram
 }
 
 func newAggregatingCollector() *aggregatingCollector {
@@ -42,6 +43,11 @@ func newAggregatingCollector() *aggregatingCollector {
 			Help:    "Connection Duration",
 			Buckets: prometheus.ExponentialBuckets(1, 1.5, 40), // 1s to ~12 weeks
 		}),
+		lossRate: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "quic_loss_rate",
+			Help:    "Loss Rate",
+			Buckets: prometheus.ExponentialBuckets(0.0001, 1.2, 40), // 0.01% to 10%
+		}),
 	}
 }
 
@@ -50,6 +56,7 @@ var _ prometheus.Collector = &aggregatingCollector{}
 func (c *aggregatingCollector) Describe(descs chan<- *prometheus.Desc) {
 	descs <- c.rtts.Desc()
 	descs <- c.connDurations.Desc()
+	descs <- c.lossRate.Desc()
 }
 
 func (c *aggregatingCollector) Collect(metrics chan<- prometheus.Metric) {
@@ -60,10 +67,14 @@ func (c *aggregatingCollector) Collect(metrics chan<- prometheus.Metric) {
 			c.rtts.Observe(rtt.Seconds())
 		}
 		c.connDurations.Observe(now.Sub(conn.startTime).Seconds())
+		if conn.packetsAcked >= 1000 {
+			c.lossRate.Observe(float64(conn.packetsLost) / float64(conn.packetsAcked))
+		}
 	}
 	c.mutex.Unlock()
 	metrics <- c.rtts
 	metrics <- c.connDurations
+	metrics <- c.lossRate
 }
 
 func (c *aggregatingCollector) AddConn(id string, t *metricsConnTracer) {
@@ -184,6 +195,8 @@ type metricsConnTracer struct {
 	mutex              sync.Mutex
 	numRTTMeasurements int
 	rtt                time.Duration
+	packetsAcked       uint64
+	packetsLost        uint64
 }
 
 var _ logging.ConnectionTracer = &metricsConnTracer{}
@@ -313,9 +326,17 @@ func (m *metricsConnTracer) UpdatedMetrics(rttStats *logging.RTTStats, cwnd, byt
 	m.mutex.Unlock()
 }
 
-func (m *metricsConnTracer) AcknowledgedPacket(logging.EncryptionLevel, logging.PacketNumber) {}
+func (m *metricsConnTracer) AcknowledgedPacket(logging.EncryptionLevel, logging.PacketNumber) {
+	m.mutex.Lock()
+	m.packetsAcked++
+	m.mutex.Unlock()
+}
 
 func (m *metricsConnTracer) LostPacket(level logging.EncryptionLevel, _ logging.PacketNumber, r logging.PacketLossReason) {
+	m.mutex.Lock()
+	m.packetsLost++
+	m.mutex.Unlock()
+
 	var reason string
 	switch r {
 	case logging.PacketLossReorderingThreshold:
