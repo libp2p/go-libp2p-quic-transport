@@ -212,7 +212,7 @@ func (m *metricsConnTracer) getEncLevel(packetType logging.PacketType) string {
 	}
 }
 
-func (m *metricsConnTracer) StartedConnection(net.Addr, net.Addr, logging.VersionNumber, logging.ConnectionID, logging.ConnectionID) {
+func (m *metricsConnTracer) StartedConnection(net.Addr, net.Addr, logging.ConnectionID, logging.ConnectionID) {
 	m.startTime = time.Now()
 	collector.AddConn(m.connID.String(), m)
 }
@@ -312,6 +312,8 @@ func (m *metricsConnTracer) UpdatedMetrics(rttStats *logging.RTTStats, cwnd, byt
 	m.numRTTMeasurements++
 	m.mutex.Unlock()
 }
+
+func (m *metricsConnTracer) AcknowledgedPacket(logging.EncryptionLevel, logging.PacketNumber) {}
 
 func (m *metricsConnTracer) LostPacket(level logging.EncryptionLevel, _ logging.PacketNumber, r logging.PacketLossReason) {
 	var reason string
