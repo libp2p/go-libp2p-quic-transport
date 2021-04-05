@@ -16,7 +16,7 @@ import (
 var tracer logging.Tracer
 
 func init() {
-	tracers := []logging.Tracer{}
+	tracers := []logging.Tracer{&metricsTracer{}}
 	if qlogDir := os.Getenv("QLOGDIR"); len(qlogDir) > 0 {
 		if qlogger := initQlogger(qlogDir); qlogger != nil {
 			tracers = append(tracers, qlogger)
