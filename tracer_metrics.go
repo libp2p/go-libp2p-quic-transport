@@ -227,6 +227,9 @@ func (m *metricsConnTracer) ClosedConnection(r logging.CloseReason) {
 		side = "remote"
 		desc = "stateless_reset"
 	}
+	if _, ok := r.VersionNegotiation(); ok {
+		desc = "version_negotiation"
+	}
 	if timeout, ok := r.Timeout(); ok {
 		switch timeout {
 		case logging.TimeoutReasonHandshake:
