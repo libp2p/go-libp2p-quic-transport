@@ -227,66 +227,68 @@ var _ = Describe("Connection", func() {
 		conn.Close()
 	})
 
-	It("dials to two servers at the same time", func() {
-		serverID2, serverKey2 := createPeer()
+	for i := 0; i < 32; i++ {
+		It("dials to two servers at the same time", func() {
+			serverID2, serverKey2 := createPeer()
 
-		serverTransport, err := NewTransport(serverKey, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
-		ln1 := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
-		defer ln1.Close()
-		serverTransport2, err := NewTransport(serverKey2, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
-		ln2 := runServer(serverTransport2, "/ip4/127.0.0.1/udp/0/quic")
-		defer ln2.Close()
-
-		data := bytes.Repeat([]byte{'a'}, 5*1<<20) // 5 MB
-		// wait for both servers to accept a connection
-		// then send some data
-		go func() {
-			serverConn1, err := ln1.Accept()
+			serverTransport, err := NewTransport(serverKey, nil, nil)
 			Expect(err).ToNot(HaveOccurred())
-			serverConn2, err := ln2.Accept()
+			ln1 := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
+			defer ln1.Close()
+			serverTransport2, err := NewTransport(serverKey2, nil, nil)
 			Expect(err).ToNot(HaveOccurred())
+			ln2 := runServer(serverTransport2, "/ip4/127.0.0.1/udp/0/quic")
+			defer ln2.Close()
 
-			for _, c := range []tpt.CapableConn{serverConn1, serverConn2} {
+			data := bytes.Repeat([]byte{'a'}, 5*1<<20) // 5 MB
+			// wait for both servers to accept a connection
+			// then send some data
+			go func() {
+				serverConn1, err := ln1.Accept()
+				Expect(err).ToNot(HaveOccurred())
+				serverConn2, err := ln2.Accept()
+				Expect(err).ToNot(HaveOccurred())
+
+				for _, c := range []tpt.CapableConn{serverConn1, serverConn2} {
+					go func(conn tpt.CapableConn) {
+						defer GinkgoRecover()
+						str, err := conn.OpenStream(context.Background())
+						Expect(err).ToNot(HaveOccurred())
+						defer str.Close()
+						_, err = str.Write(data)
+						Expect(err).ToNot(HaveOccurred())
+					}(c)
+				}
+			}()
+
+			clientTransport, err := NewTransport(clientKey, nil, nil)
+			Expect(err).ToNot(HaveOccurred())
+			c1, err := clientTransport.Dial(context.Background(), ln1.Multiaddr(), serverID)
+			Expect(err).ToNot(HaveOccurred())
+			defer c1.Close()
+			c2, err := clientTransport.Dial(context.Background(), ln2.Multiaddr(), serverID2)
+			Expect(err).ToNot(HaveOccurred())
+			defer c2.Close()
+
+			done := make(chan struct{}, 2)
+			// receive the data on both connections at the same time
+			for _, c := range []tpt.CapableConn{c1, c2} {
 				go func(conn tpt.CapableConn) {
 					defer GinkgoRecover()
-					str, err := conn.OpenStream(context.Background())
+					str, err := conn.AcceptStream()
 					Expect(err).ToNot(HaveOccurred())
-					defer str.Close()
-					_, err = str.Write(data)
+					str.CloseWrite()
+					d, err := ioutil.ReadAll(str)
 					Expect(err).ToNot(HaveOccurred())
+					Expect(d).To(Equal(data))
+					done <- struct{}{}
 				}(c)
 			}
-		}()
 
-		clientTransport, err := NewTransport(clientKey, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
-		c1, err := clientTransport.Dial(context.Background(), ln1.Multiaddr(), serverID)
-		Expect(err).ToNot(HaveOccurred())
-		defer c1.Close()
-		c2, err := clientTransport.Dial(context.Background(), ln2.Multiaddr(), serverID2)
-		Expect(err).ToNot(HaveOccurred())
-		defer c2.Close()
-
-		done := make(chan struct{}, 2)
-		// receive the data on both connections at the same time
-		for _, c := range []tpt.CapableConn{c1, c2} {
-			go func(conn tpt.CapableConn) {
-				defer GinkgoRecover()
-				str, err := conn.AcceptStream()
-				Expect(err).ToNot(HaveOccurred())
-				str.CloseWrite()
-				d, err := ioutil.ReadAll(str)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(d).To(Equal(data))
-				done <- struct{}{}
-			}(c)
-		}
-
-		Eventually(done, 5*time.Second).Should(Receive())
-		Eventually(done, 5*time.Second).Should(Receive())
-	})
+			Eventually(done, 5*time.Second).Should(Receive())
+			Eventually(done, 5*time.Second).Should(Receive())
+		})
+	}
 
 	It("sends stateless resets", func() {
 		serverTransport, err := NewTransport(serverKey, nil, nil)

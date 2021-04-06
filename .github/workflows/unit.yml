@@ -19,14 +19,17 @@ jobs:
       - name: Install dependencies
         run: go install
       - name: Run tests
+        env:
+          QLOGDIR: "qlog"
         run: ginkgo -r -v --cover -coverprofile coverage.txt --randomizeAllSpecs --randomizeSuites --trace --progress
       - name: Run tests (32 bit)
         if: ${{ matrix.os != 'macos' }} # can't run 32 bit tests on OSX.
         env:
           GOARCH: 386
+          QLOGDIR: "qlog"
         run: ginkgo -r -v -outputdir . -randomizeAllSpecs -randomizeSuites -trace -skipPackage integrationtests,benchmark
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+      - uses: actions/upload-artifact@v2
+        if: always()
         with:
-          file: coverage.txt
-          env_vars: OS=${{ matrix.os }}, GO=${{ matrix.go }}
+          name: qlog
+          path: qlog/

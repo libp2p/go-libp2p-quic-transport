@@ -53,6 +53,7 @@ func newQlogger(qlogDir string, role logging.Perspective, connID []byte) io.Writ
 		r = "client"
 	}
 	finalFilename := fmt.Sprintf("%s%clog_%s_%s_%x.qlog.zst", qlogDir, os.PathSeparator, t, r, connID)
+	fmt.Println("creating qlog:", finalFilename)
 	filename := fmt.Sprintf("%s%c.log_%s_%s_%x.qlog.swp", qlogDir, os.PathSeparator, t, r, connID)
 	f, err := os.Create(filename)
 	if err != nil {
