@@ -2,6 +2,7 @@ package libp2pquic
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -11,9 +12,13 @@ import (
 
 	"github.com/lucas-clemente/quic-go/logging"
 	"github.com/lucas-clemente/quic-go/qlog"
+	"golang.org/x/sync/semaphore"
 )
 
-var tracer logging.Tracer
+var (
+	tracer logging.Tracer
+	sem *semaphore.Weighted
+)
 
 func init() {
 	tracers := []logging.Tracer{&metricsTracer{}}
@@ -23,6 +28,7 @@ func init() {
 		}
 	}
 	tracer = logging.NewMultiplexedTracer(tracers...)
+	sem = semaphore.NewWeighted(8)
 }
 
 func initQlogger(qlogDir string) logging.Tracer {
@@ -81,6 +87,8 @@ func (l *qlogger) Close() error {
 	}
 	defer f.Close()
 	buf := bufio.NewWriter(f)
+	sem.Acquire(context.Background(), 1)
+	defer sem.Release(1)
 	c, err := zstd.NewWriter(buf, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithWindowSize(32*1024))
 	if err != nil {
 		return err
