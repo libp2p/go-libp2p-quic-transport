@@ -237,5 +237,9 @@
   {
     "name": "pto_count",
     "type": "INTEGER"
+  },
+  {
+    "name": "debug",
+    "type": "STRING"
   }
 ]

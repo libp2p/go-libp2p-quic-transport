@@ -212,7 +212,7 @@ func (m *metricsConnTracer) getEncLevel(packetType logging.PacketType) string {
 	}
 }
 
-func (m *metricsConnTracer) StartedConnection(net.Addr, net.Addr, logging.ConnectionID, logging.ConnectionID) {
+func (m *metricsConnTracer) StartedConnection(_, remote net.Addr, _ logging.ConnectionID, _ logging.ConnectionID) {
 	m.startTime = time.Now()
 	collector.AddConn(m.connID.String(), m)
 }

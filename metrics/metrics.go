@@ -101,6 +101,7 @@ type connectionStats struct {
 	PTOCount                   int64                  `bigquery:"pto_count"`
 	CloseReason                closeReason            `bigquery:"close_reason"`
 	Qlog                       bigquery.NullString    `bigquery:"qlog"`
+	Debug                      string                 `bigquery:"debug"`
 }
 
 type RTTMeasurement struct {
@@ -173,6 +174,7 @@ type ConnectionStats struct {
 	LastRTT, HandshakeRTT                     RTTMeasurement
 	CloseReason                               logging.CloseReason
 	Qlog                                      string
+	Debug                                     string
 }
 
 func (s *ConnectionStats) toBigQuery() *connectionStats {
@@ -229,6 +231,7 @@ func (s *ConnectionStats) toBigQuery() *connectionStats {
 		LastRTT:                    s.LastRTT.toBigQuery(),
 		CloseReason:                cr,
 		Qlog:                       bigquery.NullString{StringVal: s.Qlog, Valid: len(s.Qlog) > 0},
+		Debug:                      s.Debug,
 	}
 }
 

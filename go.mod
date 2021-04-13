@@ -5,6 +5,7 @@ go 1.15
 require (
 	cloud.google.com/go/bigquery v1.8.0
 	cloud.google.com/go/storage v1.8.0
+	github.com/go-ping/ping v0.0.0-20210407214646-e4e642a95741 // indirect
 	github.com/golang/mock v1.5.0
 	github.com/ipfs/go-log v1.0.4
 	github.com/klauspost/compress v1.11.7
