@@ -284,8 +284,8 @@ var _ = Describe("Connection", func() {
 			}(c)
 		}
 
-		Eventually(done, 5*time.Second).Should(Receive())
-		Eventually(done, 5*time.Second).Should(Receive())
+		Eventually(done, 15*time.Second).Should(Receive())
+		Eventually(done, 15*time.Second).Should(Receive())
 	})
 
 	It("sends stateless resets", func() {
