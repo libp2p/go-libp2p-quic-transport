@@ -1,12 +1,17 @@
 package libp2pquic
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/logging"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go/logging"
 )
 
 var (
@@ -164,7 +169,9 @@ func init() {
 
 type metricsTracer struct{}
 
-func (m *metricsTracer) TracerForConnection(p logging.Perspective, connID logging.ConnectionID) logging.ConnectionTracer {
+var _ logging.Tracer = &metricsTracer{}
+
+func (m *metricsTracer) TracerForConnection(_ context.Context, p logging.Perspective, connID logging.ConnectionID) logging.ConnectionTracer {
 	return &metricsConnTracer{perspective: p, connID: connID}
 }
 
@@ -217,37 +224,38 @@ func (m *metricsConnTracer) StartedConnection(net.Addr, net.Addr, logging.Connec
 	collector.AddConn(m.connID.String(), m)
 }
 
-func (m *metricsConnTracer) ClosedConnection(r logging.CloseReason) {
-	if _, _, ok := r.ApplicationError(); ok {
+func (m *metricsConnTracer) NegotiatedVersion(chosen quic.VersionNumber, clientVersions []quic.VersionNumber, serverVersions []quic.VersionNumber) {
+}
+
+func (m *metricsConnTracer) ClosedConnection(e error) {
+	var (
+		transportErr *quic.TransportError
+		remote       bool
+		desc         string
+	)
+
+	switch {
+	case errors.Is(e, &quic.ApplicationError{}):
 		return
-	}
-	var desc string
-	side := "local"
-	if _, ok := r.StatelessReset(); ok {
-		side = "remote"
+	case errors.As(e, &transportErr):
+		remote = transportErr.Remote
+		desc = transportErr.ErrorCode.String()
+	case errors.Is(e, &quic.StatelessResetError{}):
+		remote = true
 		desc = "stateless_reset"
-	}
-	if _, ok := r.VersionNegotiation(); ok {
+	case errors.Is(e, &quic.VersionNegotiationError{}):
 		desc = "version_negotiation"
+	case errors.Is(e, &quic.IdleTimeoutError{}):
+		desc = "idle_timeout"
+	case errors.Is(e, &quic.HandshakeTimeoutError{}):
+		desc = "handshake_timeout"
+	default:
+		desc = fmt.Sprintf("unknown error: %v", e)
 	}
-	if timeout, ok := r.Timeout(); ok {
-		switch timeout {
-		case logging.TimeoutReasonHandshake:
-			desc = "handshake_timeout"
-		case logging.TimeoutReasonIdle:
-			desc = "idle_timeout"
-		default:
-			desc = "unknown timeout"
-		}
-	}
-	if code, remote, ok := r.TransportError(); ok {
-		if code == 0xc { // ignore APPLICATION_ERROR
-			return
-		}
-		if remote {
-			side = "remote"
-		}
-		desc = code.String()
+
+	side := "local"
+	if remote {
+		side = "remote"
 	}
 	connErrors.WithLabelValues(side, desc).Inc()
 }

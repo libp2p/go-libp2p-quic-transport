@@ -1,13 +1,15 @@
 package libp2pquic
 
 import (
+	"errors"
+
 	"github.com/libp2p/go-libp2p-core/mux"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 )
 
 const (
-	reset quic.ErrorCode = 0
+	reset quic.StreamErrorCode = 0
 )
 
 type stream struct {
@@ -16,19 +18,17 @@ type stream struct {
 
 func (s *stream) Read(b []byte) (n int, err error) {
 	n, err = s.Stream.Read(b)
-	if serr, ok := err.(quic.StreamError); ok && serr.Canceled() {
+	if err != nil && errors.Is(err, &quic.StreamError{}) {
 		err = mux.ErrReset
 	}
-
 	return n, err
 }
 
 func (s *stream) Write(b []byte) (n int, err error) {
 	n, err = s.Stream.Write(b)
-	if serr, ok := err.(quic.StreamError); ok && serr.Canceled() {
+	if err != nil && errors.Is(err, &quic.StreamError{}) {
 		err = mux.ErrReset
 	}
-
 	return n, err
 }
 
