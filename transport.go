@@ -19,7 +19,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/pnet"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
 	p2ptls "github.com/libp2p/go-libp2p-tls"
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
 	mafmt "github.com/multiformats/go-multiaddr-fmt"
 	manet "github.com/multiformats/go-multiaddr/net"
@@ -39,7 +39,7 @@ var quicConfig = &quic.Config{
 		return true
 	},
 	KeepAlive: true,
-	Versions:  []quic.VersionNumber{quic.VersionDraft29},
+	Versions:  []quic.VersionNumber{quic.VersionDraft29, quic.Version1},
 }
 
 const statelessResetKeyInfo = "libp2p quic stateless reset key"
