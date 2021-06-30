@@ -83,8 +83,13 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 		if ok {
 			select {
 			case holePunch.connCh <- conn:
+				// We need to delete the entry from the map here,
+				// in case we accept two connections from the same address.
+				l.transport.holePunchingMx.Lock()
+				delete(l.transport.holePunching, key)
+				l.transport.holePunchingMx.Unlock()
 				continue
-			case <-holePunch.ctx.Done():
+			default:
 			}
 		}
 

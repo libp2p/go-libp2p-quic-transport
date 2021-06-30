@@ -111,7 +111,6 @@ var _ tpt.Transport = &transport{}
 
 type activeHolePunch struct {
 	connCh chan tpt.CapableConn
-	ctx    context.Context
 }
 
 // NewTransport creates a new QUIC transport
@@ -238,14 +237,8 @@ func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDP
 
 	key := addr.String()
 	t.holePunchingMx.Lock()
-	t.holePunching[key] = activeHolePunch{connCh: connCh, ctx: ctx}
+	t.holePunching[key] = activeHolePunch{connCh: connCh}
 	t.holePunchingMx.Unlock()
-
-	defer func() {
-		t.holePunchingMx.Lock()
-		delete(t.holePunching, key)
-		t.holePunchingMx.Unlock()
-	}()
 
 	payload := make([]byte, 64)
 	for i := 0; ; i++ {
@@ -260,12 +253,14 @@ func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDP
 		if maxSleep > 200 {
 			maxSleep = 200
 		}
-		sleep := 10*time.Millisecond + time.Duration(rand.Intn(maxSleep))*time.Millisecond
 		select {
 		case c := <-connCh:
 			return c, nil
-		case <-time.After(sleep):
+		case <-time.After(10*time.Millisecond + time.Duration(rand.Intn(maxSleep))*time.Millisecond):
 		case <-ctx.Done():
+			t.holePunchingMx.Lock()
+			delete(t.holePunching, key)
+			t.holePunchingMx.Unlock()
 			return nil, ErrHolePunching
 		}
 	}
