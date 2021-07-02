@@ -35,6 +35,8 @@ var ErrHolePunching = errors.New("hole punching attempted; no active dial")
 
 var quicDialContext = quic.DialContext // so we can mock it in tests
 
+var HolePunchTimeout = 5 * time.Second
+
 var quicConfig = &quic.Config{
 	MaxIncomingStreams:         1000,
 	MaxIncomingUniStreams:      -1,             // disable unidirectional streams
@@ -230,7 +232,7 @@ func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDP
 	}
 	defer pconn.DecreaseCount()
 
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, HolePunchTimeout)
 	defer cancel()
 
 	connCh := make(chan tpt.CapableConn)
