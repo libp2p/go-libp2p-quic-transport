@@ -243,6 +243,12 @@ func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDP
 	t.holePunchingMx.Unlock()
 
 	payload := make([]byte, 64)
+	var timer *time.Timer
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
 	for i := 0; ; i++ {
 		if _, err := rand.Read(payload); err != nil {
 			return nil, err
@@ -255,10 +261,16 @@ func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDP
 		if maxSleep > 200 {
 			maxSleep = 200
 		}
+		d := 10*time.Millisecond + time.Duration(rand.Intn(maxSleep))*time.Millisecond
+		if timer == nil {
+			timer = time.NewTimer(d)
+		} else {
+			timer.Reset(d)
+		}
 		select {
 		case c := <-connCh:
 			return c, nil
-		case <-time.After(10*time.Millisecond + time.Duration(rand.Intn(maxSleep))*time.Millisecond):
+		case <-timer.C:
 		case <-ctx.Done():
 			t.holePunchingMx.Lock()
 			delete(t.holePunching, key)
