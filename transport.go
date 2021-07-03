@@ -175,7 +175,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 
 	if simConnect, _ := n.GetSimultaneousConnect(ctx); simConnect {
 		if bytes.Compare([]byte(t.localPeer), []byte(p)) < 0 {
-			return t.holePunch(ctx, network, addr)
+			return t.holePunch(ctx, network, addr, p)
 		}
 	}
 
@@ -225,7 +225,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	return conn, nil
 }
 
-func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDPAddr) (tpt.CapableConn, error) {
+func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDPAddr, p peer.ID) (tpt.CapableConn, error) {
 	pconn, err := t.connManager.Dial(network, addr)
 	if err != nil {
 		return nil, err
@@ -235,7 +235,7 @@ func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDP
 	ctx, cancel := context.WithTimeout(ctx, HolePunchTimeout)
 	defer cancel()
 
-	key := addr.String()
+	key := holePunchKey(addr, p)
 	t.holePunchingMx.Lock()
 	if _, ok := t.holePunching[key]; ok {
 		t.holePunchingMx.Unlock()
@@ -343,4 +343,8 @@ func (t *transport) Protocols() []int {
 
 func (t *transport) String() string {
 	return "QUIC"
+}
+
+func holePunchKey(addr net.Addr, id peer.ID) string {
+	return addr.String() + "__" + id.String()
 }
