@@ -77,22 +77,18 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 
 		// return through active hole punching if any
 		key := sess.RemoteAddr().String()
+		var wasHolePunch bool
 		l.transport.holePunchingMx.Lock()
 		holePunch, ok := l.transport.holePunching[key]
-		l.transport.holePunchingMx.Unlock()
-		if ok {
-			select {
-			case holePunch.connCh <- conn:
-				// We need to delete the entry from the map here,
-				// in case we accept two connections from the same address.
-				l.transport.holePunchingMx.Lock()
-				delete(l.transport.holePunching, key)
-				l.transport.holePunchingMx.Unlock()
-				continue
-			default:
-			}
+		if ok && !holePunch.fulfilled {
+			holePunch.connCh <- conn
+			wasHolePunch = true
+			holePunch.fulfilled = true
 		}
-
+		l.transport.holePunchingMx.Unlock()
+		if wasHolePunch {
+			continue
+		}
 		return conn, nil
 	}
 }

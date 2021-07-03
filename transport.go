@@ -11,14 +11,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/libp2p/go-libp2p-core/connmgr"
-	n "github.com/libp2p/go-libp2p-core/network"
-
 	"github.com/minio/sha256-simd"
 	"golang.org/x/crypto/hkdf"
 
 	logging "github.com/ipfs/go-log"
+	"github.com/libp2p/go-libp2p-core/connmgr"
 	ic "github.com/libp2p/go-libp2p-core/crypto"
+	n "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/pnet"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
@@ -106,13 +105,14 @@ type transport struct {
 	gater        connmgr.ConnectionGater
 
 	holePunchingMx sync.Mutex
-	holePunching   map[string]activeHolePunch
+	holePunching   map[string]*activeHolePunch
 }
 
 var _ tpt.Transport = &transport{}
 
 type activeHolePunch struct {
-	connCh chan tpt.CapableConn
+	connCh    chan tpt.CapableConn
+	fulfilled bool
 }
 
 // NewTransport creates a new QUIC transport
@@ -153,7 +153,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 		serverConfig: config,
 		clientConfig: config.Clone(),
 		gater:        gater,
-		holePunching: make(map[string]activeHolePunch),
+		holePunching: make(map[string]*activeHolePunch),
 	}, nil
 }
 
@@ -235,26 +235,34 @@ func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDP
 	ctx, cancel := context.WithTimeout(ctx, HolePunchTimeout)
 	defer cancel()
 
-	connCh := make(chan tpt.CapableConn)
-
 	key := addr.String()
 	t.holePunchingMx.Lock()
-	t.holePunching[key] = activeHolePunch{connCh: connCh}
+	if _, ok := t.holePunching[key]; ok {
+		t.holePunchingMx.Unlock()
+		return nil, fmt.Errorf("already punching hole for %s", addr)
+	}
+	connCh := make(chan tpt.CapableConn, 1)
+	t.holePunching[key] = &activeHolePunch{connCh: connCh}
 	t.holePunchingMx.Unlock()
 
-	payload := make([]byte, 64)
 	var timer *time.Timer
 	defer func() {
 		if timer != nil {
 			timer.Stop()
 		}
 	}()
+
+	payload := make([]byte, 64)
+	var punchErr error
+loop:
 	for i := 0; ; i++ {
 		if _, err := rand.Read(payload); err != nil {
-			return nil, err
+			punchErr = err
+			break
 		}
 		if _, err := pconn.UDPConn.WriteToUDP(payload, addr); err != nil {
-			return nil, err
+			punchErr = err
+			break
 		}
 
 		maxSleep := 10 * (i + 1) * (i + 1) // in ms
@@ -269,14 +277,27 @@ func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDP
 		}
 		select {
 		case c := <-connCh:
-			return c, nil
-		case <-timer.C:
-		case <-ctx.Done():
 			t.holePunchingMx.Lock()
 			delete(t.holePunching, key)
 			t.holePunchingMx.Unlock()
-			return nil, ErrHolePunching
+			return c, nil
+		case <-timer.C:
+		case <-ctx.Done():
+			punchErr = ErrHolePunching
+			break loop
 		}
+	}
+	// we only arrive here if punchErr != nil
+	t.holePunchingMx.Lock()
+	defer func() {
+		delete(t.holePunching, key)
+		t.holePunchingMx.Unlock()
+	}()
+	select {
+	case c := <-t.holePunching[key].connCh:
+		return c, nil
+	default:
+		return nil, punchErr
 	}
 }
 
