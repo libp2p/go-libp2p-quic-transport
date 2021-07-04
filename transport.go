@@ -105,10 +105,15 @@ type transport struct {
 	gater        connmgr.ConnectionGater
 
 	holePunchingMx sync.Mutex
-	holePunching   map[string]*activeHolePunch
+	holePunching   map[holePunchKey]*activeHolePunch
 }
 
 var _ tpt.Transport = &transport{}
+
+type holePunchKey struct {
+	addr string
+	peer peer.ID
+}
 
 type activeHolePunch struct {
 	connCh    chan tpt.CapableConn
@@ -153,7 +158,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 		serverConfig: config,
 		clientConfig: config.Clone(),
 		gater:        gater,
-		holePunching: make(map[string]*activeHolePunch),
+		holePunching: make(map[holePunchKey]*activeHolePunch),
 	}, nil
 }
 
@@ -235,7 +240,7 @@ func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDP
 	ctx, cancel := context.WithTimeout(ctx, HolePunchTimeout)
 	defer cancel()
 
-	key := holePunchKey(addr, p)
+	key := holePunchKey{addr: addr.String(), peer: p}
 	t.holePunchingMx.Lock()
 	if _, ok := t.holePunching[key]; ok {
 		t.holePunchingMx.Unlock()
@@ -343,8 +348,4 @@ func (t *transport) Protocols() []int {
 
 func (t *transport) String() string {
 	return "QUIC"
-}
-
-func holePunchKey(addr net.Addr, id peer.ID) string {
-	return addr.String() + "__" + id.String()
 }

@@ -76,7 +76,7 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 		}
 
 		// return through active hole punching if any
-		key := holePunchKey(sess.RemoteAddr(), conn.remotePeerID)
+		key := holePunchKey{addr: sess.RemoteAddr().String(), peer: conn.remotePeerID}
 		var wasHolePunch bool
 		l.transport.holePunchingMx.Lock()
 		holePunch, ok := l.transport.holePunching[key]
