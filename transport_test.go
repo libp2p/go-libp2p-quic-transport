@@ -11,7 +11,7 @@ import (
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
 
 	. "github.com/onsi/ginkgo"

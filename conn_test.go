@@ -11,14 +11,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	gomock "github.com/golang/mock/gomock"
 	ic "github.com/libp2p/go-libp2p-core/crypto"
+	n "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
-
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	ma "github.com/multiformats/go-multiaddr"
 
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -344,5 +344,54 @@ var _ = Describe("Connection", func() {
 		}
 		Expect(rerr).To(HaveOccurred())
 		Expect(rerr.Error()).To(ContainSubstring("received a stateless reset"))
+	})
+
+	It("hole punches", func() {
+		t1, err := NewTransport(serverKey, nil, nil)
+		Expect(err).ToNot(HaveOccurred())
+		laddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
+		Expect(err).ToNot(HaveOccurred())
+		ln1, err := t1.Listen(laddr)
+		Expect(err).ToNot(HaveOccurred())
+		done1 := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			defer close(done1)
+			if _, err := ln1.Accept(); err == nil {
+				Fail("didn't expect to accept any connections")
+			}
+		}()
+
+		t2, err := NewTransport(clientKey, nil, nil)
+		Expect(err).ToNot(HaveOccurred())
+		ln2, err := t2.Listen(laddr)
+		Expect(err).ToNot(HaveOccurred())
+		done2 := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+			defer close(done2)
+			if _, err := ln2.Accept(); err == nil {
+				Fail("didn't expect to accept any connections")
+			}
+		}()
+		connChan := make(chan tpt.CapableConn)
+		go func() {
+			defer GinkgoRecover()
+			conn, err := t2.Dial(n.WithSimultaneousConnect(context.Background(), ""), ln1.Multiaddr(), serverID)
+			Expect(err).ToNot(HaveOccurred())
+			connChan <- conn
+		}()
+		conn1, err := t1.Dial(n.WithSimultaneousConnect(context.Background(), ""), ln2.Multiaddr(), clientID)
+		Expect(err).ToNot(HaveOccurred())
+		defer conn1.Close()
+		Expect(conn1.RemotePeer()).To(Equal(clientID))
+		var conn2 tpt.CapableConn
+		Eventually(connChan).Should(Receive(&conn2))
+		defer conn2.Close()
+		Expect(conn2.RemotePeer()).To(Equal(serverID))
+		ln1.Close()
+		ln2.Close()
+		Eventually(done1).Should(BeClosed())
+		Eventually(done2).Should(BeClosed())
 	})
 })

@@ -12,7 +12,7 @@ import (
 
 	p2ptls "github.com/libp2p/go-libp2p-tls"
 
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
@@ -74,6 +74,21 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 			sess.CloseWithError(errorCodeConnectionGating, "connection gated")
 			continue
 		}
+
+		// return through active hole punching if any
+		key := holePunchKey{addr: sess.RemoteAddr().String(), peer: conn.remotePeerID}
+		var wasHolePunch bool
+		l.transport.holePunchingMx.Lock()
+		holePunch, ok := l.transport.holePunching[key]
+		if ok && !holePunch.fulfilled {
+			holePunch.connCh <- conn
+			wasHolePunch = true
+			holePunch.fulfilled = true
+		}
+		l.transport.holePunchingMx.Unlock()
+		if wasHolePunch {
+			continue
+		}
 		return conn, nil
 	}
 }
@@ -92,6 +107,7 @@ func (l *listener) setupConn(sess quic.Session) (*conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	remoteMultiaddr, err := toQuicMultiaddr(sess.RemoteAddr())
 	if err != nil {
 		return nil, err
