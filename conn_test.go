@@ -377,7 +377,7 @@ var _ = Describe("Connection", func() {
 		connChan := make(chan tpt.CapableConn)
 		go func() {
 			defer GinkgoRecover()
-			conn, err := t2.Dial(n.WithSimultaneousConnect(context.Background(), ""), ln1.Multiaddr(), serverID)
+			conn, err := t2.Dial(context.Background(), ln1.Multiaddr(), serverID)
 			Expect(err).ToNot(HaveOccurred())
 			connChan <- conn
 		}()

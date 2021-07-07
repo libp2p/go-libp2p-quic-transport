@@ -1,7 +1,6 @@
 package libp2pquic
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -179,9 +178,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	tlsConf, keyCh := t.identity.ConfigForPeer(p)
 
 	if simConnect, _ := n.GetSimultaneousConnect(ctx); simConnect {
-		if bytes.Compare([]byte(t.localPeer), []byte(p)) < 0 {
-			return t.holePunch(ctx, network, addr, p)
-		}
+		return t.holePunch(ctx, network, addr, p)
 	}
 
 	pconn, err := t.connManager.Dial(network, addr)
