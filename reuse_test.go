@@ -1,7 +1,10 @@
 package libp2pquic
 
 import (
+	"bytes"
 	"net"
+	"runtime/pprof"
+	"strings"
 	"time"
 
 	"github.com/libp2p/go-netroute"
@@ -30,7 +33,6 @@ func closeAllConns(reuse *reuse) {
 		}
 	}
 	reuse.mutex.Unlock()
-	Eventually(isGarbageCollectorRunning).Should(BeFalse())
 }
 
 func OnPlatformsWithRoutingTablesIt(description string, f interface{}) {
@@ -47,6 +49,16 @@ var _ = Describe("Reuse", func() {
 	BeforeEach(func() {
 		reuse = newReuse()
 	})
+
+	AfterEach(func() {
+		Expect(reuse.Close()).To(Succeed())
+	})
+
+	isGarbageCollectorRunning := func() bool {
+		var b bytes.Buffer
+		pprof.Lookup("goroutine").WriteTo(&b, 1)
+		return strings.Contains(b.String(), "go-libp2p-quic-transport.(*reuse).runGarbageCollector")
+	}
 
 	Context("creating and reusing connections", func() {
 		AfterEach(func() { closeAllConns(reuse) })

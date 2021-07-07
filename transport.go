@@ -93,6 +93,13 @@ func (c *connManager) Dial(network string, raddr *net.UDPAddr) (*reuseConn, erro
 	return reuse.Dial(network, raddr)
 }
 
+func (c *connManager) Close() error {
+	if err := c.reuseUDP6.Close(); err != nil {
+		return err
+	}
+	return c.reuseUDP4.Close()
+}
+
 // The Transport implements the tpt.Transport interface for QUIC connections.
 type transport struct {
 	privKey      ic.PrivKey
@@ -345,4 +352,8 @@ func (t *transport) Protocols() []int {
 
 func (t *transport) String() string {
 	return "QUIC"
+}
+
+func (t *transport) Close() error {
+	return t.connManager.Close()
 }

@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"io"
 	"net"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
@@ -28,6 +29,10 @@ var _ = Describe("Transport", func() {
 		Expect(err).ToNot(HaveOccurred())
 		t, err = NewTransport(key, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		Expect(t.(io.Closer).Close()).To(Succeed())
 	})
 
 	It("says if it can dial an address", func() {

@@ -53,6 +53,9 @@ type reuse struct {
 
 	garbageCollectorRunning bool
 
+	closeChan                chan struct{}
+	garbageCollectorStopChan chan struct{}
+
 	unicast map[string] /* IP.String() */ map[int] /* port */ *reuseConn
 	// global contains connections that are listening on 0.0.0.0 / ::
 	global map[int]*reuseConn
@@ -60,45 +63,52 @@ type reuse struct {
 
 func newReuse() *reuse {
 	return &reuse{
-		unicast: make(map[string]map[int]*reuseConn),
-		global:  make(map[int]*reuseConn),
+		unicast:   make(map[string]map[int]*reuseConn),
+		global:    make(map[int]*reuseConn),
+		closeChan: make(chan struct{}),
 	}
 }
 
 func (r *reuse) runGarbageCollector() {
+	defer close(r.garbageCollectorStopChan)
 	ticker := time.NewTicker(garbageCollectInterval)
 	defer ticker.Stop()
 
-	for now := range ticker.C {
-		var shouldExit bool
-		r.mutex.Lock()
-		for key, conn := range r.global {
-			if conn.ShouldGarbageCollect(now) {
-				conn.Close()
-				delete(r.global, key)
-			}
-		}
-		for ukey, conns := range r.unicast {
-			for key, conn := range conns {
+	for {
+		select {
+		case <-r.closeChan:
+			return
+		case now := <-ticker.C:
+			var shouldExit bool
+			r.mutex.Lock()
+			for key, conn := range r.global {
 				if conn.ShouldGarbageCollect(now) {
 					conn.Close()
-					delete(conns, key)
+					delete(r.global, key)
 				}
 			}
-			if len(conns) == 0 {
-				delete(r.unicast, ukey)
+			for ukey, conns := range r.unicast {
+				for key, conn := range conns {
+					if conn.ShouldGarbageCollect(now) {
+						conn.Close()
+						delete(conns, key)
+					}
+				}
+				if len(conns) == 0 {
+					delete(r.unicast, ukey)
+				}
 			}
-		}
 
-		// stop the garbage collector if we're not tracking any connections
-		if len(r.global) == 0 && len(r.unicast) == 0 {
-			r.garbageCollectorRunning = false
-			shouldExit = true
-		}
-		r.mutex.Unlock()
+			// stop the garbage collector if we're not tracking any connections
+			if len(r.global) == 0 && len(r.unicast) == 0 {
+				r.garbageCollectorRunning = false
+				shouldExit = true
+			}
+			r.mutex.Unlock()
 
-		if shouldExit {
-			return
+			if shouldExit {
+				return
+			}
 		}
 	}
 }
@@ -107,6 +117,7 @@ func (r *reuse) runGarbageCollector() {
 func (r *reuse) maybeStartGarbageCollector() {
 	if !r.garbageCollectorRunning {
 		r.garbageCollectorRunning = true
+		r.garbageCollectorStopChan = make(chan struct{})
 		go r.runGarbageCollector()
 	}
 }
@@ -198,4 +209,15 @@ func (r *reuse) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
 	// so we need not check here (when we create ListenUDP).
 	r.unicast[localAddr.IP.String()][localAddr.Port] = rconn
 	return rconn, err
+}
+
+func (r *reuse) Close() error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	close(r.closeChan)
+	if r.garbageCollectorRunning {
+		<-r.garbageCollectorStopChan
+		r.garbageCollectorRunning = false
+	}
+	return nil
 }
