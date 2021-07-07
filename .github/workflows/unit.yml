@@ -20,6 +20,9 @@ jobs:
         run: go install
       - name: Run tests
         run: ginkgo -r -v --cover -coverprofile coverage.txt --randomizeAllSpecs --randomizeSuites --trace --progress
+      - name: Run tests with race detector
+        if: ${{ matrix.os == 'ubuntu' }} # speed things up. Windows and OSX VMs are slow
+        run: ginkgo -r -v -race --randomizeAllSpecs --randomizeSuites --trace --progress
       - name: Run tests (32 bit)
         if: ${{ matrix.os != 'macos' }} # can't run 32 bit tests on OSX.
         env:
