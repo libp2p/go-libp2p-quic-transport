@@ -56,9 +56,9 @@ type connManager struct {
 	reuseUDP6 *reuse
 }
 
-func newConnManager(gater connmgr.ConnectionGater) (*connManager, error) {
-	reuseUDP4 := newReuse(gater)
-	reuseUDP6 := newReuse(gater)
+func newConnManager() (*connManager, error) {
+	reuseUDP4 := newReuse()
+	reuseUDP6 := newReuse()
 
 	return &connManager{
 		reuseUDP4: reuseUDP4,
@@ -133,7 +133,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 	if err != nil {
 		return nil, err
 	}
-	connManager, err := newConnManager(gater)
+	connManager, err := newConnManager()
 	if err != nil {
 		return nil, err
 	}

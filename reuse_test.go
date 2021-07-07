@@ -45,7 +45,7 @@ var _ = Describe("Reuse", func() {
 	var reuse *reuse
 
 	BeforeEach(func() {
-		reuse = newReuse(nil)
+		reuse = newReuse()
 	})
 
 	Context("creating and reusing connections", func() {

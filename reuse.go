@@ -5,8 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/libp2p/go-libp2p-core/connmgr"
-
 	"github.com/libp2p/go-netroute"
 )
 
@@ -24,7 +22,7 @@ type reuseConn struct {
 	unusedSince time.Time
 }
 
-func newReuseConn(conn *net.UDPConn, gater connmgr.ConnectionGater) *reuseConn {
+func newReuseConn(conn *net.UDPConn) *reuseConn {
 	return &reuseConn{UDPConn: conn}
 }
 
@@ -53,8 +51,6 @@ func (c *reuseConn) ShouldGarbageCollect(now time.Time) bool {
 type reuse struct {
 	mutex sync.Mutex
 
-	gater connmgr.ConnectionGater
-
 	garbageCollectorRunning bool
 
 	unicast map[string] /* IP.String() */ map[int] /* port */ *reuseConn
@@ -62,9 +58,8 @@ type reuse struct {
 	global map[int]*reuseConn
 }
 
-func newReuse(gater connmgr.ConnectionGater) *reuse {
+func newReuse() *reuse {
 	return &reuse{
-		gater:   gater,
 		unicast: make(map[string]map[int]*reuseConn),
 		global:  make(map[int]*reuseConn),
 	}
@@ -127,7 +122,7 @@ func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	conn, err := r.dialLocked(network, raddr, ip)
+	conn, err := r.dialLocked(network, ip)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +131,7 @@ func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
 	return conn, nil
 }
 
-func (r *reuse) dialLocked(network string, raddr *net.UDPAddr, source *net.IP) (*reuseConn, error) {
+func (r *reuse) dialLocked(network string, source *net.IP) (*reuseConn, error) {
 	if source != nil {
 		// We already have at least one suitable connection...
 		if conns, ok := r.unicast[source.String()]; ok {
@@ -166,7 +161,7 @@ func (r *reuse) dialLocked(network string, raddr *net.UDPAddr, source *net.IP) (
 	if err != nil {
 		return nil, err
 	}
-	rconn := newReuseConn(conn, r.gater)
+	rconn := newReuseConn(conn)
 	r.global[conn.LocalAddr().(*net.UDPAddr).Port] = rconn
 	return rconn, nil
 }
@@ -178,7 +173,7 @@ func (r *reuse) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
 	}
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
-	rconn := newReuseConn(conn, r.gater)
+	rconn := newReuseConn(conn)
 	rconn.IncreaseCount()
 
 	r.mutex.Lock()
