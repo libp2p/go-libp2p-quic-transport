@@ -9,9 +9,8 @@ import (
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	peer "github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
-	tptt "github.com/libp2p/go-libp2p-testing/suites/transport"
-
 	quic "github.com/libp2p/go-libp2p-quic-transport"
+	tptt "github.com/libp2p/go-libp2p-testing/suites/transport"
 )
 
 func TestLibp2pTransportSuite(t *testing.T) {
@@ -31,7 +30,7 @@ func TestLibp2pTransportSuite(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		transport, err := quic.NewTransport(priv)
+		transport, err := quic.NewTransport(priv, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
