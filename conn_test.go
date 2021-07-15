@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"io/ioutil"
 	mrand "math/rand"
 	"net"
@@ -70,11 +71,13 @@ var _ = Describe("Connection", func() {
 	It("handshakes on IPv4", func() {
 		serverTransport, err := NewTransport(serverKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer serverTransport.(io.Closer).Close()
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
 
 		clientTransport, err := NewTransport(clientKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer clientTransport.(io.Closer).Close()
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
 		defer conn.Close()
@@ -94,11 +97,13 @@ var _ = Describe("Connection", func() {
 	It("handshakes on IPv6", func() {
 		serverTransport, err := NewTransport(serverKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer serverTransport.(io.Closer).Close()
 		ln := runServer(serverTransport, "/ip6/::1/udp/0/quic")
 		defer ln.Close()
 
 		clientTransport, err := NewTransport(clientKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer clientTransport.(io.Closer).Close()
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
 		defer conn.Close()
@@ -118,11 +123,13 @@ var _ = Describe("Connection", func() {
 	It("opens and accepts streams", func() {
 		serverTransport, err := NewTransport(serverKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer serverTransport.(io.Closer).Close()
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
 
 		clientTransport, err := NewTransport(clientKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer clientTransport.(io.Closer).Close()
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
 		defer conn.Close()
@@ -147,6 +154,7 @@ var _ = Describe("Connection", func() {
 
 		serverTransport, err := NewTransport(serverKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer serverTransport.(io.Closer).Close()
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
 		clientTransport, err := NewTransport(clientKey, nil, nil)
@@ -154,6 +162,7 @@ var _ = Describe("Connection", func() {
 		// dial, but expect the wrong peer ID
 		_, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), thirdPartyID)
 		Expect(err).To(HaveOccurred())
+		defer clientTransport.(io.Closer).Close()
 		Expect(err.Error()).To(ContainSubstring("CRYPTO_ERROR"))
 
 		done := make(chan struct{})
@@ -172,6 +181,7 @@ var _ = Describe("Connection", func() {
 		cg.EXPECT().InterceptAccept(gomock.Any())
 		serverTransport, err := NewTransport(serverKey, nil, cg)
 		Expect(err).ToNot(HaveOccurred())
+		defer serverTransport.(io.Closer).Close()
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
 
@@ -185,6 +195,7 @@ var _ = Describe("Connection", func() {
 
 		clientTransport, err := NewTransport(clientKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer clientTransport.(io.Closer).Close()
 		// make sure that connection attempts fails
 		conn, err := clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
@@ -205,6 +216,7 @@ var _ = Describe("Connection", func() {
 	It("gates secured connections", func() {
 		serverTransport, err := NewTransport(serverKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer serverTransport.(io.Closer).Close()
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln.Close()
 
@@ -213,6 +225,7 @@ var _ = Describe("Connection", func() {
 
 		clientTransport, err := NewTransport(clientKey, nil, cg)
 		Expect(err).ToNot(HaveOccurred())
+		defer clientTransport.(io.Closer).Close()
 
 		// make sure that connection attempts fails
 		_, err = clientTransport.Dial(context.Background(), ln.Multiaddr(), serverID)
@@ -232,10 +245,12 @@ var _ = Describe("Connection", func() {
 
 		serverTransport, err := NewTransport(serverKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer serverTransport.(io.Closer).Close()
 		ln1 := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln1.Close()
 		serverTransport2, err := NewTransport(serverKey2, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer serverTransport2.(io.Closer).Close()
 		ln2 := runServer(serverTransport2, "/ip4/127.0.0.1/udp/0/quic")
 		defer ln2.Close()
 
@@ -262,6 +277,7 @@ var _ = Describe("Connection", func() {
 
 		clientTransport, err := NewTransport(clientKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer clientTransport.(io.Closer).Close()
 		c1, err := clientTransport.Dial(context.Background(), ln1.Multiaddr(), serverID)
 		Expect(err).ToNot(HaveOccurred())
 		defer c1.Close()
@@ -291,6 +307,7 @@ var _ = Describe("Connection", func() {
 	It("sends stateless resets", func() {
 		serverTransport, err := NewTransport(serverKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer serverTransport.(io.Closer).Close()
 		ln := runServer(serverTransport, "/ip4/127.0.0.1/udp/0/quic")
 
 		var drop uint32
@@ -307,6 +324,7 @@ var _ = Describe("Connection", func() {
 		// establish a connection
 		clientTransport, err := NewTransport(clientKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer clientTransport.(io.Closer).Close()
 		proxyAddr, err := toQuicMultiaddr(proxy.LocalAddr())
 		Expect(err).ToNot(HaveOccurred())
 		conn, err := clientTransport.Dial(context.Background(), proxyAddr, serverID)
@@ -349,6 +367,7 @@ var _ = Describe("Connection", func() {
 	It("hole punches", func() {
 		t1, err := NewTransport(serverKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer t1.(io.Closer).Close()
 		laddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
 		Expect(err).ToNot(HaveOccurred())
 		ln1, err := t1.Listen(laddr)
@@ -364,6 +383,7 @@ var _ = Describe("Connection", func() {
 
 		t2, err := NewTransport(clientKey, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+		defer t2.(io.Closer).Close()
 		ln2, err := t2.Listen(laddr)
 		Expect(err).ToNot(HaveOccurred())
 		done2 := make(chan struct{})

@@ -7,12 +7,13 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"syscall"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
-	quic "github.com/lucas-clemente/quic-go"
+	"github.com/lucas-clemente/quic-go"
 
 	ma "github.com/multiformats/go-multiaddr"
 	. "github.com/onsi/ginkgo"
@@ -36,6 +37,10 @@ var _ = Describe("Listener", func() {
 		Expect(err).ToNot(HaveOccurred())
 		t, err = NewTransport(key, nil, nil)
 		Expect(err).ToNot(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		Expect(t.(io.Closer).Close()).To(Succeed())
 	})
 
 	It("uses a conn that can interface assert to a UDPConn for listening", func() {
