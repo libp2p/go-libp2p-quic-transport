@@ -51,14 +51,15 @@ var _ = Describe("Reuse", func() {
 	})
 
 	AfterEach(func() {
-		Expect(reuse.Close()).To(Succeed())
-	})
+		isGarbageCollectorRunning := func() bool {
+			var b bytes.Buffer
+			pprof.Lookup("goroutine").WriteTo(&b, 1)
+			return strings.Contains(b.String(), "go-libp2p-quic-transport.(*reuse).gc")
+		}
 
-	isGarbageCollectorRunning := func() bool {
-		var b bytes.Buffer
-		pprof.Lookup("goroutine").WriteTo(&b, 1)
-		return strings.Contains(b.String(), "go-libp2p-quic-transport.(*reuse).runGarbageCollector")
-	}
+		Expect(reuse.Close()).To(Succeed())
+		Expect(isGarbageCollectorRunning()).To(BeFalse())
+	})
 
 	Context("creating and reusing connections", func() {
 		AfterEach(func() { closeAllConns(reuse) })
@@ -126,54 +127,32 @@ var _ = Describe("Reuse", func() {
 		})
 	})
 
-	Context("garbage-collecting connections", func() {
+	It("garbage collects connections once they're not used any more for a certain time", func() {
 		numGlobals := func() int {
 			reuse.mutex.Lock()
 			defer reuse.mutex.Unlock()
 			return len(reuse.global)
 		}
 
-		BeforeEach(func() {
-			maxUnusedDuration = 100 * time.Millisecond
-		})
+		maxUnusedDuration = 100 * time.Millisecond
 
-		It("garbage collects connections once they're not used any more for a certain time", func() {
-			addr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:0")
-			Expect(err).ToNot(HaveOccurred())
-			lconn, err := reuse.Listen("udp4", addr)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(lconn.GetCount()).To(Equal(1))
+		addr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:0")
+		Expect(err).ToNot(HaveOccurred())
+		lconn, err := reuse.Listen("udp4", addr)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(lconn.GetCount()).To(Equal(1))
 
-			closeTime := time.Now()
-			lconn.DecreaseCount()
+		closeTime := time.Now()
+		lconn.DecreaseCount()
 
-			for {
-				num := numGlobals()
-				if closeTime.Add(maxUnusedDuration).Before(time.Now()) {
-					break
-				}
-				Expect(num).To(Equal(1))
-				time.Sleep(2 * time.Millisecond)
+		for {
+			num := numGlobals()
+			if closeTime.Add(maxUnusedDuration).Before(time.Now()) {
+				break
 			}
-			Eventually(numGlobals).Should(BeZero())
-		})
-
-		It("only stops the garbage collector when there are no more connections", func() {
-			addr1, err := net.ResolveUDPAddr("udp4", "0.0.0.0:0")
-			Expect(err).ToNot(HaveOccurred())
-			conn1, err := reuse.Listen("udp4", addr1)
-			Expect(err).ToNot(HaveOccurred())
-
-			addr2, err := net.ResolveUDPAddr("udp4", "0.0.0.0:0")
-			Expect(err).ToNot(HaveOccurred())
-			conn2, err := reuse.Listen("udp4", addr2)
-			Expect(err).ToNot(HaveOccurred())
-
-			Eventually(isGarbageCollectorRunning).Should(BeTrue())
-			conn1.DecreaseCount()
-			Consistently(isGarbageCollectorRunning, 2*maxUnusedDuration).Should(BeTrue())
-			conn2.DecreaseCount()
-			Eventually(isGarbageCollectorRunning, 2*maxUnusedDuration).Should(BeFalse())
-		})
+			Expect(num).To(Equal(1))
+			time.Sleep(2 * time.Millisecond)
+		}
+		Eventually(numGlobals).Should(BeZero())
 	})
 })

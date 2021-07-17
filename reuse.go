@@ -51,10 +51,8 @@ func (c *reuseConn) ShouldGarbageCollect(now time.Time) bool {
 type reuse struct {
 	mutex sync.Mutex
 
-	garbageCollectorRunning bool
-
-	closeChan                chan struct{}
-	garbageCollectorStopChan chan struct{}
+	closeChan  chan struct{}
+	gcStopChan chan struct{}
 
 	unicast map[string] /* IP.String() */ map[int] /* port */ *reuseConn
 	// global contains connections that are listening on 0.0.0.0 / ::
@@ -62,15 +60,18 @@ type reuse struct {
 }
 
 func newReuse() *reuse {
-	return &reuse{
-		unicast:   make(map[string]map[int]*reuseConn),
-		global:    make(map[int]*reuseConn),
-		closeChan: make(chan struct{}),
+	r := &reuse{
+		unicast:    make(map[string]map[int]*reuseConn),
+		global:     make(map[int]*reuseConn),
+		closeChan:  make(chan struct{}),
+		gcStopChan: make(chan struct{}),
 	}
+	go r.gc()
+	return r
 }
 
-func (r *reuse) runGarbageCollector() {
-	defer close(r.garbageCollectorStopChan)
+func (r *reuse) gc() {
+	defer close(r.gcStopChan)
 	ticker := time.NewTicker(garbageCollectInterval)
 	defer ticker.Stop()
 
@@ -79,7 +80,6 @@ func (r *reuse) runGarbageCollector() {
 		case <-r.closeChan:
 			return
 		case now := <-ticker.C:
-			var shouldExit bool
 			r.mutex.Lock()
 			for key, conn := range r.global {
 				if conn.ShouldGarbageCollect(now) {
@@ -98,29 +98,11 @@ func (r *reuse) runGarbageCollector() {
 					delete(r.unicast, ukey)
 				}
 			}
-
-			// stop the garbage collector if we're not tracking any connections
-			if len(r.global) == 0 && len(r.unicast) == 0 {
-				r.garbageCollectorRunning = false
-				shouldExit = true
-			}
 			r.mutex.Unlock()
-
-			if shouldExit {
-				return
-			}
 		}
 	}
 }
 
-// must be called while holding the mutex
-func (r *reuse) maybeStartGarbageCollector() {
-	if !r.garbageCollectorRunning {
-		r.garbageCollectorRunning = true
-		r.garbageCollectorStopChan = make(chan struct{})
-		go r.runGarbageCollector()
-	}
-}
 func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
 	var ip *net.IP
 	if router, err := netroute.New(); err == nil {
@@ -138,7 +120,6 @@ func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
 		return nil, err
 	}
 	conn.IncreaseCount()
-	r.maybeStartGarbageCollector()
 	return conn, nil
 }
 
@@ -190,8 +171,6 @@ func (r *reuse) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	r.maybeStartGarbageCollector()
-
 	// Deal with listen on a global address
 	if localAddr.IP.IsUnspecified() {
 		// The kernel already checked that the laddr is not already listen
@@ -212,12 +191,7 @@ func (r *reuse) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
 }
 
 func (r *reuse) Close() error {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
 	close(r.closeChan)
-	if r.garbageCollectorRunning {
-		<-r.garbageCollectorStopChan
-		r.garbageCollectorRunning = false
-	}
+	<-r.gcStopChan
 	return nil
 }
