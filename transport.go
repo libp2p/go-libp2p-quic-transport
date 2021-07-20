@@ -56,9 +56,9 @@ type connManager struct {
 	reuseUDP6 *reuse
 }
 
-func newConnManager(gater connmgr.ConnectionGater) (*connManager, error) {
-	reuseUDP4 := newReuse(gater)
-	reuseUDP6 := newReuse(gater)
+func newConnManager() (*connManager, error) {
+	reuseUDP4 := newReuse()
+	reuseUDP6 := newReuse()
 
 	return &connManager{
 		reuseUDP4: reuseUDP4,
@@ -91,6 +91,13 @@ func (c *connManager) Dial(network string, raddr *net.UDPAddr) (*reuseConn, erro
 		return nil, err
 	}
 	return reuse.Dial(network, raddr)
+}
+
+func (c *connManager) Close() error {
+	if err := c.reuseUDP6.Close(); err != nil {
+		return err
+	}
+	return c.reuseUDP4.Close()
 }
 
 // The Transport implements the tpt.Transport interface for QUIC connections.
@@ -133,7 +140,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 	if err != nil {
 		return nil, err
 	}
-	connManager, err := newConnManager(gater)
+	connManager, err := newConnManager()
 	if err != nil {
 		return nil, err
 	}
@@ -345,4 +352,8 @@ func (t *transport) Protocols() []int {
 
 func (t *transport) String() string {
 	return "QUIC"
+}
+
+func (t *transport) Close() error {
+	return t.connManager.Close()
 }
