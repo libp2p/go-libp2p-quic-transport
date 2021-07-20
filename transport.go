@@ -121,6 +121,7 @@ type activeHolePunch struct {
 
 // NewTransport creates a new QUIC transport
 func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (tpt.Transport, error) {
+	fmt.Println("new transport")
 	if len(psk) > 0 {
 		log.Error("QUIC doesn't support private networks yet.")
 		return nil, errors.New("QUIC doesn't support private networks yet")
@@ -228,6 +229,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 }
 
 func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDPAddr, p peer.ID) (tpt.CapableConn, error) {
+	fmt.Println("doing holepunch to reach peer", p)
 	pconn, err := t.connManager.Dial(network, addr)
 	if err != nil {
 		return nil, err
@@ -245,6 +247,7 @@ func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDP
 	}
 	connCh := make(chan tpt.CapableConn, 1)
 	t.holePunching[key] = &activeHolePunch{connCh: connCh}
+	fmt.Printf("created holepunching map entry: %#v\n", key)
 	t.holePunchingMx.Unlock()
 
 	var timer *time.Timer

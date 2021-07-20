@@ -1,6 +1,7 @@
 package libp2pquic
 
 import (
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ type reuseConn struct {
 }
 
 func newReuseConn(conn *net.UDPConn, gater connmgr.ConnectionGater) *reuseConn {
+	fmt.Printf("new reuse: %s <-> %s\n", conn.LocalAddr(), conn.RemoteAddr())
 	return &reuseConn{UDPConn: conn}
 }
 
@@ -79,6 +81,7 @@ func (r *reuse) runGarbageCollector() {
 		r.mutex.Lock()
 		for key, conn := range r.global {
 			if conn.ShouldGarbageCollect(now) {
+				fmt.Println("gargabe collecting (#1) conn from", conn.LocalAddr())
 				conn.Close()
 				delete(r.global, key)
 			}
@@ -86,6 +89,7 @@ func (r *reuse) runGarbageCollector() {
 		for ukey, conns := range r.unicast {
 			for key, conn := range conns {
 				if conn.ShouldGarbageCollect(now) {
+					fmt.Println("gargabe collecting (#2) conn from", conn.LocalAddr())
 					conn.Close()
 					delete(conns, key)
 				}

@@ -353,6 +353,7 @@ var _ = Describe("Connection", func() {
 		Expect(err).ToNot(HaveOccurred())
 		ln1, err := t1.Listen(laddr)
 		Expect(err).ToNot(HaveOccurred())
+		fmt.Println("Listener 1 listening on", ln1.Multiaddr())
 		done1 := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
@@ -366,6 +367,7 @@ var _ = Describe("Connection", func() {
 		Expect(err).ToNot(HaveOccurred())
 		ln2, err := t2.Listen(laddr)
 		Expect(err).ToNot(HaveOccurred())
+		fmt.Println("Listener 2 listening on", ln2.Multiaddr())
 		done2 := make(chan struct{})
 		go func() {
 			defer GinkgoRecover()
