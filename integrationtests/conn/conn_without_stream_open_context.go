@@ -9,6 +9,6 @@ import (
 	tpt "github.com/libp2p/go-libp2p-core/transport"
 )
 
-func OpenStream(_ context.Context, c tpt.CapableConn)  (mux.MuxedStream, error) {
+func OpenStream(_ context.Context, c tpt.CapableConn) (mux.MuxedStream, error) {
 	return c.OpenStream()
 }
