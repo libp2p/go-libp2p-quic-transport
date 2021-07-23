@@ -25,19 +25,19 @@ jobs:
           go version
           go env
       - name: Run tests
-        uses: protocol/multiple-go-modules@v1.0
+        uses: protocol/multiple-go-modules@6834c83adb490bcc21cd6cc7b3baa0528d63f755
         with:
           run: go test -v -coverprofile coverage.txt ./...
       - name: Run tests (32 bit)
         if: ${{ matrix.os != 'macos' }} # can't run 32 bit tests on OSX.
-        uses: protocol/multiple-go-modules@v1.0
+        uses: protocol/multiple-go-modules@6834c83adb490bcc21cd6cc7b3baa0528d63f755
         env:
           GOARCH: 386
         with:
           run: go test -v ./...
       - name: Run tests with race detector
         if: ${{ matrix.os == 'ubuntu' }} # speed things up. Windows and OSX VMs are slow
-        uses: protocol/multiple-go-modules@v1.0
+        uses: protocol/multiple-go-modules@6834c83adb490bcc21cd6cc7b3baa0528d63f755
         with:
           run: go test -v -race ./...
       - name: Upload coverage to Codecov
