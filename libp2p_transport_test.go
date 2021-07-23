@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"io"
 	"testing"
+	"time"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	peer "github.com/libp2p/go-libp2p-core/peer"
@@ -46,6 +47,7 @@ func TestLibp2pTransportSuite(t *testing.T) {
 				_ = c.Close()
 			}
 		}
+		time.Sleep(time.Minute)
 	})
 
 	tptt.SubtestTransport(t, serverTpt, clientTpt, "/ip4/127.0.0.1/udp/0/quic", serverID)
