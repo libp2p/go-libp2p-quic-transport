@@ -71,7 +71,19 @@ func newReuse() *reuse {
 }
 
 func (r *reuse) gc() {
-	defer close(r.gcStopChan)
+	defer func() {
+		r.mutex.Lock()
+		for _, conn := range r.global {
+			conn.Close()
+		}
+		for _, conns := range r.unicast {
+			for _, conn := range conns {
+				conn.Close()
+			}
+		}
+		r.mutex.Unlock()
+		close(r.gcStopChan)
+	}()
 	ticker := time.NewTicker(garbageCollectInterval)
 	defer ticker.Stop()
 
@@ -193,15 +205,5 @@ func (r *reuse) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
 func (r *reuse) Close() error {
 	close(r.closeChan)
 	<-r.gcStopChan
-	r.mutex.Lock()
-	for _, conn := range r.global {
-		conn.Close()
-	}
-	for _, conns := range r.unicast {
-		for _, conn := range conns {
-			conn.Close()
-		}
-	}
-	r.mutex.Unlock()
 	return nil
 }
