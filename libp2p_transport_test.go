@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"io"
 	"testing"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
@@ -38,6 +39,14 @@ func TestLibp2pTransportSuite(t *testing.T) {
 	}
 	clientTpt, _, _ := create()
 	serverTpt, serverID, _ := create()
+
+	t.Cleanup(func() {
+		for _, t := range []tpt.Transport{clientTpt, serverTpt} {
+			if c, ok := t.(io.Closer); ok {
+				_ = c.Close()
+			}
+		}
+	})
 
 	tptt.SubtestTransport(t, serverTpt, clientTpt, "/ip4/127.0.0.1/udp/0/quic", serverID)
 }
