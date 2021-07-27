@@ -71,6 +71,7 @@ func newReuse() *reuse {
 }
 
 func (r *reuse) gc() {
+	defer close(r.gcStopChan)
 	defer func() {
 		r.mutex.Lock()
 		for _, conn := range r.global {
@@ -82,7 +83,6 @@ func (r *reuse) gc() {
 			}
 		}
 		r.mutex.Unlock()
-		close(r.gcStopChan)
 	}()
 	ticker := time.NewTicker(garbageCollectInterval)
 	defer ticker.Stop()
