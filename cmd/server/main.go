@@ -72,7 +72,7 @@ func handleConn(conn tpt.CapableConn) error {
 		return err
 	}
 	log.Printf("Received: %s\n", data)
-	if _, err := str.Write([]byte(data)); err != nil {
+	if _, err := str.Write(data); err != nil {
 		return err
 	}
 	return str.Close()

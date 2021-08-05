@@ -9,7 +9,7 @@ import (
 	"os"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
-	peer "github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/peer"
 	libp2pquic "github.com/libp2p/go-libp2p-quic-transport"
 	ma "github.com/multiformats/go-multiaddr"
 )
@@ -53,12 +53,13 @@ func run(raddr string, p string) error {
 	if err != nil {
 		return err
 	}
+	defer str.Close()
 	const msg = "Hello world!"
 	log.Printf("Sending: %s\n", msg)
 	if _, err := str.Write([]byte(msg)); err != nil {
 		return err
 	}
-	if err := str.Close(); err != nil {
+	if err := str.CloseWrite(); err != nil {
 		return err
 	}
 	data, err := ioutil.ReadAll(str)
