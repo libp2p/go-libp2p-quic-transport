@@ -1,13 +1,12 @@
 [
-  { "go": "1.13", "commit": "v0.6.0", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": true },
-  { "go": "1.14", "commit": "v0.6.0", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": true },
-  { "go": "1.13", "commit": "v0.7.0", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": true },
-  { "go": "1.14", "commit": "v0.7.0", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": true},
-  { "go": "1.13", "commit": "v0.7.1", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": true },
-  { "go": "1.14", "commit": "v0.7.1", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": true },
-  // v0.7.1 was never released in IPFS.
-  { "go": "1.14", "commit": "v0.8.0", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": true },
+  // deployed in go-ipfs v0.7.0
   { "go": "1.15", "commit": "v0.8.0", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": true },
+  // deployed in go-ipfs v0.8.0
+  { "go": "1.15", "commit": "v0.10.0", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": false },
+  { "go": "1.16", "commit": "v0.10.0", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": false },
+  // deployed in go-ipfs v0.9.0 and v0.9.1
+  { "go": "1.15", "commit": "v0.11.2", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": false },
+  { "go": "1.16", "commit": "v0.11.2", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": false },
   { "go": "1.15", "commit": "HEAD", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": false },
   { "go": "1.16", "commit": "HEAD", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": false }
 ]
