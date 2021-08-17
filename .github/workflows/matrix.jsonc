@@ -7,6 +7,6 @@
   // deployed in go-ipfs v0.9.0 and v0.9.1
   { "go": "1.15", "commit": "v0.11.2", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": false },
   { "go": "1.16", "commit": "v0.11.2", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": false },
-  { "go": "1.15", "commit": "HEAD", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": false },
-  { "go": "1.16", "commit": "HEAD", "retireBugBackwardsCompatiblityMode": true, "hasAcceptStreamBug": false }
+  { "go": "1.16", "commit": "HEAD", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": false },
+  { "go": "1.17", "commit": "HEAD", "retireBugBackwardsCompatiblityMode": false, "hasAcceptStreamBug": false }
 ]
