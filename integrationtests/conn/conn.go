@@ -1,3 +1,4 @@
+//go:build !stream_open_no_context
 // +build !stream_open_no_context
 
 package conn
