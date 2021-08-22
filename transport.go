@@ -184,7 +184,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	}
 	tlsConf, keyCh := t.identity.ConfigForPeer(p)
 
-	if simConnect, _ := n.GetSimultaneousConnect(ctx); simConnect {
+	if ok, isClient, _ := n.GetSimultaneousConnect(ctx); ok && !isClient {
 		return t.holePunch(ctx, network, addr, p)
 	}
 
