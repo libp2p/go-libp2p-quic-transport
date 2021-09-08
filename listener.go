@@ -37,7 +37,7 @@ func newListener(rconn *reuseConn, t *transport, localPeer peer.ID, key ic.PrivK
 		// Note that since we have no way of associating an incoming QUIC connection with
 		// the peer ID calculated here, we don't actually receive the peer's public key
 		// from the key chan.
-		conf, _ := identity.ConfigForAny()
+		conf, _ := identity.ConfigForPeer("")
 		return conf, nil
 	}
 	ln, err := quicListen(rconn, &tlsConf, t.serverConfig)

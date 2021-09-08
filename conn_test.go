@@ -397,11 +397,19 @@ var _ = Describe("Connection", func() {
 		connChan := make(chan tpt.CapableConn)
 		go func() {
 			defer GinkgoRecover()
-			conn, err := t2.Dial(context.Background(), ln1.Multiaddr(), serverID)
+			conn, err := t2.Dial(
+				n.WithSimultaneousConnect(context.Background(), false, ""),
+				ln1.Multiaddr(),
+				serverID,
+			)
 			Expect(err).ToNot(HaveOccurred())
 			connChan <- conn
 		}()
-		conn1, err := t1.Dial(n.WithSimultaneousConnect(context.Background(), ""), ln2.Multiaddr(), clientID)
+		conn1, err := t1.Dial(
+			n.WithSimultaneousConnect(context.Background(), true, ""),
+			ln2.Multiaddr(),
+			clientID,
+		)
 		Expect(err).ToNot(HaveOccurred())
 		defer conn1.Close()
 		Expect(conn1.RemotePeer()).To(Equal(clientID))
