@@ -53,7 +53,7 @@ var _ = Describe("Transport", func() {
 	It("supports the QUIC protocol", func() {
 		protocols := t.Protocols()
 		Expect(protocols).To(HaveLen(1))
-		Expect(protocols[0]).To(Equal(ma.P_QUIC))
+		Expect(protocols[0].Code).To(Equal(ma.P_QUIC))
 	})
 
 	It("uses a conn that can interface assert to a UDPConn for dialing", func() {
