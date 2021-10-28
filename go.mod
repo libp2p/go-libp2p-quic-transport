@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/golang/mock v1.6.0
+	github.com/google/gopacket v1.1.17
 	github.com/ipfs/go-log v1.0.4
 	github.com/klauspost/compress v1.11.7
 	github.com/libp2p/go-libp2p-core v0.10.0
