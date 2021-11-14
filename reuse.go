@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/gopacket/routing"
 	"github.com/libp2p/go-netroute"
 )
 
@@ -54,6 +55,7 @@ type reuse struct {
 	closeChan  chan struct{}
 	gcStopChan chan struct{}
 
+	routes  routing.Router
 	unicast map[string] /* IP.String() */ map[int] /* port */ *reuseConn
 	// global contains connections that are listening on 0.0.0.0 / ::
 	global map[int]*reuseConn
@@ -108,6 +110,15 @@ func (r *reuse) gc() {
 				}
 				if len(conns) == 0 {
 					delete(r.unicast, ukey)
+					// If we've dropped all connections with a unicast binding,
+					// assume our routes may have changed.
+					if len(r.unicast) == 0 {
+						r.routes = nil
+					} else {
+						// Ignore the error, there's nothing we can do about
+						// it.
+						r.routes, _ = netroute.New()
+					}
 				}
 			}
 			r.mutex.Unlock()
@@ -117,7 +128,15 @@ func (r *reuse) gc() {
 
 func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
 	var ip *net.IP
-	if router, err := netroute.New(); err == nil {
+
+	// Only bother looking up the source address if we actually _have_ non 0.0.0.0 listeners.
+	// Otherwise, save some time.
+
+	r.mutex.Lock()
+	router := r.routes
+	r.mutex.Unlock()
+
+	if router != nil {
 		_, _, src, err := router.Route(raddr.IP)
 		if err == nil && !src.IsUnspecified() {
 			ip = &src
@@ -194,6 +213,9 @@ func (r *reuse) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
 	// Deal with listen on a unicast address
 	if _, ok := r.unicast[localAddr.IP.String()]; !ok {
 		r.unicast[localAddr.IP.String()] = make(map[int]*reuseConn)
+		// Assume the system's routes may have changed if we're adding a new listener.
+		// Ignore the error, there's nothing we can do.
+		r.routes, _ = netroute.New()
 	}
 
 	// The kernel already checked that the laddr is not already listen
