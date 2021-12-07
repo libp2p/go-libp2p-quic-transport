@@ -13,7 +13,7 @@ import (
 	"github.com/minio/sha256-simd"
 	"golang.org/x/crypto/hkdf"
 
-	logging "github.com/ipfs/go-log"
+	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p-core/connmgr"
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	n "github.com/libp2p/go-libp2p-core/network"
