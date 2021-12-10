@@ -36,7 +36,7 @@ var quicDialContext = quic.DialContext // so we can mock it in tests
 var HolePunchTimeout = 5 * time.Second
 
 var quicConfig = &quic.Config{
-	MaxIncomingStreams:         1000,
+	MaxIncomingStreams:         256,
 	MaxIncomingUniStreams:      -1,             // disable unidirectional streams
 	MaxStreamReceiveWindow:     10 * (1 << 20), // 10 MB
 	MaxConnectionReceiveWindow: 15 * (1 << 20), // 15 MB
