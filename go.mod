@@ -7,12 +7,12 @@ require (
 	github.com/google/gopacket v1.1.17
 	github.com/ipfs/go-log/v2 v2.4.0
 	github.com/klauspost/compress v1.11.7
-	github.com/libp2p/go-libp2p-core v0.10.0
-	github.com/libp2p/go-libp2p-tls v0.3.0
+	github.com/libp2p/go-libp2p-core v0.10.1-0.20210921170543-f829c09c1ca0
+	github.com/libp2p/go-libp2p-tls v0.3.1-0.20210921173952-a113dc2e87ca
 	github.com/libp2p/go-netroute v0.1.3
 	github.com/lucas-clemente/quic-go v0.24.0
 	github.com/minio/sha256-simd v0.1.1
-	github.com/multiformats/go-multiaddr v0.3.1
+	github.com/multiformats/go-multiaddr v0.4.1
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.13.0

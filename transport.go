@@ -345,9 +345,11 @@ func (t *transport) Proxy() bool {
 	return false
 }
 
+var protoQuic = ma.ProtocolWithCode(ma.P_QUIC)
+
 // Protocols returns the set of protocols handled by this transport.
-func (t *transport) Protocols() []int {
-	return []int{ma.P_QUIC}
+func (t *transport) Protocols() []ma.Protocol {
+	return []ma.Protocol{protoQuic}
 }
 
 func (t *transport) String() string {
