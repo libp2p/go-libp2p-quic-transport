@@ -25,6 +25,7 @@ type stream struct {
 	mux.MuxedStream
 }
 
+//lint:ignore SA1019 // This needs to build with older versions.
 func WrapStream(str mux.MuxedStream) *stream {
 	return &stream{MuxedStream: str}
 }

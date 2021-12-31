@@ -10,21 +10,24 @@ import (
 	"sync"
 	"time"
 
-	"github.com/minio/sha256-simd"
 	"golang.org/x/crypto/hkdf"
 
-	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-libp2p-core/connmgr"
 	ic "github.com/libp2p/go-libp2p-core/crypto"
-	n "github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/pnet"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
+
 	p2ptls "github.com/libp2p/go-libp2p-tls"
-	"github.com/lucas-clemente/quic-go"
+
 	ma "github.com/multiformats/go-multiaddr"
 	mafmt "github.com/multiformats/go-multiaddr-fmt"
 	manet "github.com/multiformats/go-multiaddr/net"
+
+	logging "github.com/ipfs/go-log/v2"
+	"github.com/lucas-clemente/quic-go"
+	"github.com/minio/sha256-simd"
 )
 
 var log = logging.Logger("quic-transport")
@@ -109,6 +112,7 @@ type transport struct {
 	serverConfig *quic.Config
 	clientConfig *quic.Config
 	gater        connmgr.ConnectionGater
+	rcmgr        network.ResourceManager
 
 	holePunchingMx sync.Mutex
 	holePunching   map[holePunchKey]*activeHolePunch
@@ -127,7 +131,7 @@ type activeHolePunch struct {
 }
 
 // NewTransport creates a new QUIC transport
-func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (tpt.Transport, error) {
+func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater, rcmgr network.ResourceManager) (tpt.Transport, error) {
 	if len(psk) > 0 {
 		log.Error("QUIC doesn't support private networks yet.")
 		return nil, errors.New("QUIC doesn't support private networks yet")
@@ -143,6 +147,9 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 	connManager, err := newConnManager()
 	if err != nil {
 		return nil, err
+	}
+	if rcmgr == nil {
+		rcmgr = network.NullResourceManager
 	}
 	config := quicConfig.Clone()
 	keyBytes, err := key.Raw()
@@ -164,17 +171,18 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater) (
 		serverConfig: config,
 		clientConfig: config.Clone(),
 		gater:        gater,
+		rcmgr:        rcmgr,
 		holePunching: make(map[holePunchKey]*activeHolePunch),
 	}, nil
 }
 
 // Dial dials a new QUIC connection
 func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tpt.CapableConn, error) {
-	network, host, err := manet.DialArgs(raddr)
+	netw, host, err := manet.DialArgs(raddr)
 	if err != nil {
 		return nil, err
 	}
-	addr, err := net.ResolveUDPAddr(network, host)
+	addr, err := net.ResolveUDPAddr(netw, host)
 	if err != nil {
 		return nil, err
 	}
@@ -183,17 +191,27 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		return nil, err
 	}
 	tlsConf, keyCh := t.identity.ConfigForPeer(p)
-
-	if ok, isClient, _ := n.GetSimultaneousConnect(ctx); ok && !isClient {
-		return t.holePunch(ctx, network, addr, p)
+	if ok, isClient, _ := network.GetSimultaneousConnect(ctx); ok && !isClient {
+		return t.holePunch(ctx, netw, addr, p)
 	}
 
-	pconn, err := t.connManager.Dial(network, addr)
+	scope, err := t.rcmgr.OpenConnection(network.DirOutbound, false)
+	if err != nil {
+		log.Debugw("resource manager blocked outgoing connection", "peer", p, "addr", raddr, "error", err)
+		return nil, err
+	}
+	if err := scope.SetPeer(p); err != nil {
+		log.Debugw("resource manager blocked outgoing connection for peer", "peer", p, "addr", raddr, "error", err)
+		scope.Done()
+		return nil, err
+	}
+	pconn, err := t.connManager.Dial(netw, addr)
 	if err != nil {
 		return nil, err
 	}
 	sess, err := quicDialContext(ctx, pconn, addr, host, tlsConf, t.clientConfig)
 	if err != nil {
+		scope.Done()
 		pconn.DecreaseCount()
 		return nil, err
 	}
@@ -205,6 +223,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	}
 	if remotePubKey == nil {
 		pconn.DecreaseCount()
+		scope.Done()
 		return nil, errors.New("go-libp2p-quic-transport BUG: expected remote pub key to be set")
 	}
 
@@ -217,6 +236,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		sess:            sess,
 		pconn:           pconn,
 		transport:       t,
+		scope:           scope,
 		privKey:         t.privKey,
 		localPeer:       t.localPeer,
 		localMultiaddr:  localMultiaddr,
@@ -224,7 +244,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		remotePeerID:    p,
 		remoteMultiaddr: remoteMultiaddr,
 	}
-	if t.gater != nil && !t.gater.InterceptSecured(n.DirOutbound, p, conn) {
+	if t.gater != nil && !t.gater.InterceptSecured(network.DirOutbound, p, conn) {
 		sess.CloseWithError(errorCodeConnectionGating, "connection gated")
 		return nil, fmt.Errorf("secured connection gated")
 	}
@@ -329,7 +349,7 @@ func (t *transport) Listen(addr ma.Multiaddr) (tpt.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	ln, err := newListener(conn, t, t.localPeer, t.privKey, t.identity)
+	ln, err := newListener(conn, t, t.localPeer, t.privKey, t.identity, t.rcmgr)
 	if err != nil {
 		conn.DecreaseCount()
 		return nil, err

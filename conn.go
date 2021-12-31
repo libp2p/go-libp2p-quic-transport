@@ -4,7 +4,7 @@ import (
 	"context"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/libp2p/go-libp2p-core/mux"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
 
@@ -16,6 +16,7 @@ type conn struct {
 	sess      quic.Session
 	pconn     *reuseConn
 	transport tpt.Transport
+	scope     network.ConnManagementScope
 
 	localPeer      peer.ID
 	privKey        ic.PrivKey
@@ -32,8 +33,10 @@ var _ tpt.CapableConn = &conn{}
 // It must be called even if the peer closed the connection in order for
 // garbage collection to properly work in this package.
 func (c *conn) Close() error {
+	err := c.sess.CloseWithError(0, "")
 	c.pconn.DecreaseCount()
-	return c.sess.CloseWithError(0, "")
+	c.scope.Done()
+	return err
 }
 
 // IsClosed returns whether a connection is fully closed.
@@ -42,13 +45,13 @@ func (c *conn) IsClosed() bool {
 }
 
 // OpenStream creates a new stream.
-func (c *conn) OpenStream(ctx context.Context) (mux.MuxedStream, error) {
+func (c *conn) OpenStream(ctx context.Context) (network.MuxedStream, error) {
 	qstr, err := c.sess.OpenStreamSync(ctx)
 	return &stream{Stream: qstr}, err
 }
 
 // AcceptStream accepts a stream opened by the other side.
-func (c *conn) AcceptStream() (mux.MuxedStream, error) {
+func (c *conn) AcceptStream() (network.MuxedStream, error) {
 	qstr, err := c.sess.AcceptStream(context.Background())
 	return &stream{Stream: qstr}, err
 }
@@ -85,4 +88,8 @@ func (c *conn) RemoteMultiaddr() ma.Multiaddr {
 
 func (c *conn) Transport() tpt.Transport {
 	return c.transport
+}
+
+func (c *conn) Scope() network.ConnScope {
+	return c.scope
 }

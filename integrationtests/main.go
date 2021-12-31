@@ -12,15 +12,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/transport"
-	libp2pquic "github.com/libp2p/go-libp2p-quic-transport"
-	ma "github.com/multiformats/go-multiaddr"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/conn"
 	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/stream"
+	"github.com/libp2p/go-libp2p-quic-transport/integrationtests/transport"
+
+	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/peer"
+	tpt "github.com/libp2p/go-libp2p-core/transport"
+
+	ma "github.com/multiformats/go-multiaddr"
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
@@ -78,7 +79,7 @@ func readKeys(hostKeyFile, peerKeyFile string) (crypto.PrivKey, crypto.PubKey, e
 }
 
 func runServer(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr, test string) error {
-	tr, err := libp2pquic.NewTransport(hostKey, nil, nil)
+	tr, err := transport.New(hostKey)
 	if err != nil {
 		return err
 	}
@@ -129,7 +130,7 @@ func runServer(hostKey crypto.PrivKey, peerKey crypto.PubKey, addr ma.Multiaddr,
 }
 
 func runClient(hostKey crypto.PrivKey, serverKey crypto.PubKey, addr ma.Multiaddr, test string) error {
-	tr, err := libp2pquic.NewTransport(hostKey, nil, nil)
+	tr, err := transport.New(hostKey)
 	if err != nil {
 		return err
 	}
@@ -145,7 +146,7 @@ func runClient(hostKey crypto.PrivKey, serverKey crypto.PubKey, addr ma.Multiadd
 	}
 }
 
-func testSingleFileTransfer(tr transport.Transport, serverKey crypto.PubKey, addr ma.Multiaddr) error {
+func testSingleFileTransfer(tr tpt.Transport, serverKey crypto.PubKey, addr ma.Multiaddr) error {
 	serverPeerID, err := peer.IDFromPublicKey(serverKey)
 	if err != nil {
 		return err
@@ -186,7 +187,7 @@ func testSingleFileTransfer(tr transport.Transport, serverKey crypto.PubKey, add
 	return nil
 }
 
-func testMultipleFileTransfer(tr transport.Transport, serverKey crypto.PubKey, addr ma.Multiaddr) error {
+func testMultipleFileTransfer(tr tpt.Transport, serverKey crypto.PubKey, addr ma.Multiaddr) error {
 	serverPeerID, err := peer.IDFromPublicKey(serverKey)
 	if err != nil {
 		return err
@@ -233,7 +234,7 @@ func testMultipleFileTransfer(tr transport.Transport, serverKey crypto.PubKey, a
 	return g.Wait()
 }
 
-func testHandshakeFailure(tr transport.Transport, serverKey crypto.PubKey, addr ma.Multiaddr) error {
+func testHandshakeFailure(tr tpt.Transport, serverKey crypto.PubKey, addr ma.Multiaddr) error {
 	serverPeerID, err := peer.IDFromPublicKey(serverKey)
 	if err != nil {
 		return err

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/network"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
 
 	"github.com/lucas-clemente/quic-go"
@@ -20,12 +21,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTransport(t *testing.T) tpt.Transport {
+func newTransport(t *testing.T, rcmgr network.ResourceManager) tpt.Transport {
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	key, err := ic.UnmarshalRsaPrivateKey(x509.MarshalPKCS1PrivateKey(rsaKey))
 	require.NoError(t, err)
-	tr, err := NewTransport(key, nil, nil)
+	tr, err := NewTransport(key, nil, nil, rcmgr)
 	require.NoError(t, err)
 	return tr
 }
@@ -44,7 +45,7 @@ func TestConnUsedForListening(t *testing.T) {
 	localAddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
 	require.NoError(t, err)
 
-	tr := newTransport(t)
+	tr := newTransport(t, nil)
 	defer tr.(io.Closer).Close()
 	_, err = tr.Listen(localAddr)
 	require.EqualError(t, err, "listen error")
@@ -55,7 +56,7 @@ func TestConnUsedForListening(t *testing.T) {
 }
 
 func TestListenAddr(t *testing.T) {
-	tr := newTransport(t)
+	tr := newTransport(t, nil)
 	defer tr.(io.Closer).Close()
 
 	t.Run("for IPv4", func(t *testing.T) {
@@ -80,7 +81,7 @@ func TestListenAddr(t *testing.T) {
 }
 
 func TestAccepting(t *testing.T) {
-	tr := newTransport(t)
+	tr := newTransport(t, nil)
 	defer tr.(io.Closer).Close()
 	ln, err := tr.Listen(ma.StringCast("/ip4/127.0.0.1/udp/0/quic"))
 	require.NoError(t, err)
@@ -104,7 +105,7 @@ func TestAccepting(t *testing.T) {
 }
 
 func TestAcceptAfterClose(t *testing.T) {
-	tr := newTransport(t)
+	tr := newTransport(t, nil)
 	defer tr.(io.Closer).Close()
 	ln, err := tr.Listen(ma.StringCast("/ip4/127.0.0.1/udp/0/quic"))
 	require.NoError(t, err)

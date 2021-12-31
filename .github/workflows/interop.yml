@@ -65,6 +65,10 @@ jobs:
           if [[ `git merge-base --is-ancestor HEAD 3123af36d6cec13e31dac75058c8046e6e4a6690; echo $?` != "1" ]]; then
             TAGS+=("stream_open_no_context")
           fi
+          # This command doesn't take into account off-master releases. That's why we need a special case for the v0.11.2 release.
+          if [[ `git merge-base --is-ancestor HEAD 5c11755be71c11950e107f0c2c7b900e1d59ce6d; echo $?` != "1" || `git merge-base --is-ancestor HEAD v0.11.2; echo $?` != "1" ]]; then
+            TAGS+=("new_transport_no_rcmgr")
+          fi
           if [[ "${{ matrix.cfg.retireBugBackwardsCompatiblityMode }}" == "true" ]]; then
             TAGS+=("retirebugcompatmode")
           fi
