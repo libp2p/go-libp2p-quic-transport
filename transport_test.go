@@ -93,7 +93,7 @@ func TestConnectionPassedToQUIC(t *testing.T) {
 	require.EqualError(t, err, "listen error")
 	require.NotNil(t, conn)
 	defer conn.Close()
-	if _, ok := conn.(udpConn); !ok {
+	if _, ok := conn.(quic.OOBCapablePacketConn); !ok {
 		t.Fatal("connection passed to quic-go cannot be type asserted to a *net.UDPConn")
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"syscall"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
@@ -19,13 +18,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
-
-// interface containing some methods defined on the net.UDPConn, but not the net.PacketConn
-type udpConn interface {
-	ReadFromUDP(b []byte) (int, *net.UDPAddr, error)
-	SetReadBuffer(bytes int) error
-	SyscallConn() (syscall.RawConn, error)
-}
 
 var _ = Describe("Listener", func() {
 	var t tpt.Transport
@@ -58,7 +50,7 @@ var _ = Describe("Listener", func() {
 		Expect(err).To(MatchError("listen error"))
 		Expect(conn).ToNot(BeNil())
 		defer conn.Close()
-		_, ok := conn.(udpConn)
+		_, ok := conn.(quic.OOBCapablePacketConn)
 		Expect(ok).To(BeTrue())
 	})
 
