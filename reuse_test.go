@@ -5,11 +5,11 @@ import (
 	"net"
 	"runtime/pprof"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/libp2p/go-netroute"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
 func (c *reuseConn) GetCount() int {
@@ -35,124 +35,139 @@ func closeAllConns(reuse *reuse) {
 	reuse.mutex.Unlock()
 }
 
-func OnPlatformsWithRoutingTablesIt(description string, f interface{}) {
-	if _, err := netroute.New(); err == nil {
-		It(description, f)
-	} else {
-		PIt(description, f)
-	}
+func platformHasRoutingTables() bool {
+	_, err := netroute.New()
+	return err == nil
 }
 
-var _ = Describe("Reuse", func() {
-	var reuse *reuse
+func isGarbageCollectorRunning() bool {
+	var b bytes.Buffer
+	pprof.Lookup("goroutine").WriteTo(&b, 1)
+	return strings.Contains(b.String(), "go-libp2p-quic-transport.(*reuse).gc")
+}
 
-	BeforeEach(func() {
-		reuse = newReuse()
+func cleanup(t *testing.T, reuse *reuse) {
+	t.Cleanup(func() {
+		closeAllConns(reuse)
+		reuse.Close()
+		require.False(t, isGarbageCollectorRunning(), "reuse gc still running")
 	})
+}
 
-	AfterEach(func() {
-		isGarbageCollectorRunning := func() bool {
-			var b bytes.Buffer
-			pprof.Lookup("goroutine").WriteTo(&b, 1)
-			return strings.Contains(b.String(), "go-libp2p-quic-transport.(*reuse).gc")
+func TestReuseListenOnAllIPv4(t *testing.T) {
+	reuse := newReuse()
+	cleanup(t, reuse)
+
+	addr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:0")
+	require.NoError(t, err)
+	conn, err := reuse.Listen("udp4", addr)
+	require.NoError(t, err)
+	require.Equal(t, conn.GetCount(), 1)
+}
+
+func TestReuseListenOnAllIPv6(t *testing.T) {
+	reuse := newReuse()
+	cleanup(t, reuse)
+
+	addr, err := net.ResolveUDPAddr("udp6", "[::]:1234")
+	require.NoError(t, err)
+	conn, err := reuse.Listen("udp6", addr)
+	require.NoError(t, err)
+	require.Equal(t, conn.GetCount(), 1)
+}
+
+func TestReuseCreateNewGlobalConnOnDial(t *testing.T) {
+	reuse := newReuse()
+	cleanup(t, reuse)
+
+	addr, err := net.ResolveUDPAddr("udp4", "1.1.1.1:1234")
+	require.NoError(t, err)
+	conn, err := reuse.Dial("udp4", addr)
+	require.NoError(t, err)
+	require.Equal(t, conn.GetCount(), 1)
+	laddr := conn.LocalAddr().(*net.UDPAddr)
+	require.Equal(t, laddr.IP.String(), "0.0.0.0")
+	require.NotEqual(t, laddr.Port, 0)
+}
+
+func TestReuseConnectionWhenDialing(t *testing.T) {
+	reuse := newReuse()
+	cleanup(t, reuse)
+
+	addr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:0")
+	require.NoError(t, err)
+	lconn, err := reuse.Listen("udp4", addr)
+	require.NoError(t, err)
+	require.Equal(t, lconn.GetCount(), 1)
+	// dial
+	raddr, err := net.ResolveUDPAddr("udp4", "1.1.1.1:1234")
+	require.NoError(t, err)
+	conn, err := reuse.Dial("udp4", raddr)
+	require.NoError(t, err)
+	require.Equal(t, conn.GetCount(), 2)
+}
+
+func TestReuseListenOnSpecificInterface(t *testing.T) {
+	if platformHasRoutingTables() {
+		t.Skip("this test only works on platforms that support routing tables")
+	}
+	reuse := newReuse()
+	cleanup(t, reuse)
+
+	router, err := netroute.New()
+	require.NoError(t, err)
+
+	raddr, err := net.ResolveUDPAddr("udp4", "1.1.1.1:1234")
+	require.NoError(t, err)
+	_, _, ip, err := router.Route(raddr.IP)
+	require.NoError(t, err)
+	// listen
+	addr, err := net.ResolveUDPAddr("udp4", ip.String()+":0")
+	require.NoError(t, err)
+	lconn, err := reuse.Listen("udp4", addr)
+	require.NoError(t, err)
+	require.Equal(t, lconn.GetCount(), 1)
+	// dial
+	conn, err := reuse.Dial("udp4", raddr)
+	require.NoError(t, err)
+	require.Equal(t, conn.GetCount(), 1)
+}
+
+func TestReuseGarbageCollect(t *testing.T) {
+	maxUnusedDurationOrig := maxUnusedDuration
+	garbageCollectIntervalOrig := garbageCollectInterval
+	t.Cleanup(func() {
+		maxUnusedDuration = maxUnusedDurationOrig
+		garbageCollectInterval = garbageCollectIntervalOrig
+	})
+	garbageCollectInterval = 50 * time.Millisecond
+	maxUnusedDuration = 100 * time.Millisecond
+
+	reuse := newReuse()
+	cleanup(t, reuse)
+
+	numGlobals := func() int {
+		reuse.mutex.Lock()
+		defer reuse.mutex.Unlock()
+		return len(reuse.global)
+	}
+
+	addr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:0")
+	require.NoError(t, err)
+	lconn, err := reuse.Listen("udp4", addr)
+	require.NoError(t, err)
+	require.Equal(t, lconn.GetCount(), 1)
+
+	closeTime := time.Now()
+	lconn.DecreaseCount()
+
+	for {
+		num := numGlobals()
+		if closeTime.Add(maxUnusedDuration).Before(time.Now()) {
+			break
 		}
-
-		Expect(reuse.Close()).To(Succeed())
-		Expect(isGarbageCollectorRunning()).To(BeFalse())
-	})
-
-	Context("creating and reusing connections", func() {
-		AfterEach(func() { closeAllConns(reuse) })
-
-		It("creates a new global connection when listening on 0.0.0.0", func() {
-			addr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:0")
-			Expect(err).ToNot(HaveOccurred())
-			conn, err := reuse.Listen("udp4", addr)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conn.GetCount()).To(Equal(1))
-		})
-
-		It("creates a new global connection when listening on [::]", func() {
-			addr, err := net.ResolveUDPAddr("udp6", "[::]:1234")
-			Expect(err).ToNot(HaveOccurred())
-			conn, err := reuse.Listen("udp6", addr)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conn.GetCount()).To(Equal(1))
-		})
-
-		It("creates a new global connection when dialing", func() {
-			addr, err := net.ResolveUDPAddr("udp4", "1.1.1.1:1234")
-			Expect(err).ToNot(HaveOccurred())
-			conn, err := reuse.Dial("udp4", addr)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conn.GetCount()).To(Equal(1))
-			laddr := conn.LocalAddr().(*net.UDPAddr)
-			Expect(laddr.IP.String()).To(Equal("0.0.0.0"))
-			Expect(laddr.Port).ToNot(BeZero())
-		})
-
-		It("reuses a connection it created for listening when dialing", func() {
-			// listen
-			addr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:0")
-			Expect(err).ToNot(HaveOccurred())
-			lconn, err := reuse.Listen("udp4", addr)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(lconn.GetCount()).To(Equal(1))
-			// dial
-			raddr, err := net.ResolveUDPAddr("udp4", "1.1.1.1:1234")
-			Expect(err).ToNot(HaveOccurred())
-			conn, err := reuse.Dial("udp4", raddr)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conn.GetCount()).To(Equal(2))
-		})
-
-		OnPlatformsWithRoutingTablesIt("reuses a connection it created for listening on a specific interface", func() {
-			router, err := netroute.New()
-			Expect(err).ToNot(HaveOccurred())
-
-			raddr, err := net.ResolveUDPAddr("udp4", "1.1.1.1:1234")
-			Expect(err).ToNot(HaveOccurred())
-			_, _, ip, err := router.Route(raddr.IP)
-			Expect(err).ToNot(HaveOccurred())
-			// listen
-			addr, err := net.ResolveUDPAddr("udp4", ip.String()+":0")
-			Expect(err).ToNot(HaveOccurred())
-			lconn, err := reuse.Listen("udp4", addr)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(lconn.GetCount()).To(Equal(1))
-			// dial
-			conn, err := reuse.Dial("udp4", raddr)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(conn.GetCount()).To(Equal(2))
-		})
-	})
-
-	It("garbage collects connections once they're not used any more for a certain time", func() {
-		numGlobals := func() int {
-			reuse.mutex.Lock()
-			defer reuse.mutex.Unlock()
-			return len(reuse.global)
-		}
-
-		maxUnusedDuration = 100 * time.Millisecond
-
-		addr, err := net.ResolveUDPAddr("udp4", "0.0.0.0:0")
-		Expect(err).ToNot(HaveOccurred())
-		lconn, err := reuse.Listen("udp4", addr)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(lconn.GetCount()).To(Equal(1))
-
-		closeTime := time.Now()
-		lconn.DecreaseCount()
-
-		for {
-			num := numGlobals()
-			if closeTime.Add(maxUnusedDuration).Before(time.Now()) {
-				break
-			}
-			Expect(num).To(Equal(1))
-			time.Sleep(2 * time.Millisecond)
-		}
-		Eventually(numGlobals).Should(BeZero())
-	})
-})
+		require.Equal(t, num, 1)
+		time.Sleep(2 * time.Millisecond)
+	}
+	require.Eventually(t, func() bool { return numGlobals() == 0 }, 100*time.Millisecond, 5*time.Millisecond)
+}
