@@ -14,8 +14,6 @@ require (
 	github.com/minio/sha256-simd v0.1.1
 	github.com/multiformats/go-multiaddr v0.3.1
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
-	github.com/onsi/ginkgo v1.16.4
-	github.com/onsi/gomega v1.13.0
 	github.com/prometheus/client_golang v1.9.0
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/crypto v0.0.0-20210506145944-38f3c27a63bf
