@@ -2,29 +2,26 @@ package libp2pquic
 
 import (
 	"net"
+	"testing"
 
 	ma "github.com/multiformats/go-multiaddr"
-
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Describe("QUIC Multiaddr", func() {
-	It("converts a net.Addr to a QUIC Multiaddr", func() {
-		addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 42), Port: 1337}
-		maddr, err := toQuicMultiaddr(addr)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(maddr.String()).To(Equal("/ip4/192.168.0.42/udp/1337/quic"))
-	})
+func TestConvertToQuicMultiaddr(t *testing.T) {
+	addr := &net.UDPAddr{IP: net.IPv4(192, 168, 0, 42), Port: 1337}
+	maddr, err := toQuicMultiaddr(addr)
+	require.NoError(t, err)
+	require.Equal(t, maddr.String(), "/ip4/192.168.0.42/udp/1337/quic")
+}
 
-	It("converts a QUIC Multiaddr to a net.Addr", func() {
-		maddr, err := ma.NewMultiaddr("/ip4/192.168.0.42/udp/1337/quic")
-		Expect(err).ToNot(HaveOccurred())
-		addr, err := fromQuicMultiaddr(maddr)
-		Expect(err).ToNot(HaveOccurred())
-		Expect(addr).To(BeAssignableToTypeOf(&net.UDPAddr{}))
-		udpAddr := addr.(*net.UDPAddr)
-		Expect(udpAddr.IP).To(Equal(net.IPv4(192, 168, 0, 42)))
-		Expect(udpAddr.Port).To(Equal(1337))
-	})
-})
+func TestConvertFromQuicMultiaddr(t *testing.T) {
+	maddr, err := ma.NewMultiaddr("/ip4/192.168.0.42/udp/1337/quic")
+	require.NoError(t, err)
+	addr, err := fromQuicMultiaddr(maddr)
+	require.NoError(t, err)
+	udpAddr, ok := addr.(*net.UDPAddr)
+	require.True(t, ok)
+	require.Equal(t, udpAddr.IP, net.IPv4(192, 168, 0, 42))
+	require.Equal(t, udpAddr.Port, 1337)
+}
