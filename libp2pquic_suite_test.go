@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/lucas-clemente/quic-go"
 
 	. "github.com/onsi/ginkgo"
@@ -25,12 +24,9 @@ var (
 	garbageCollectIntervalOrig time.Duration
 	maxUnusedDurationOrig      time.Duration
 	origQuicConfig             *quic.Config
-	mockCtrl                   *gomock.Controller
 )
 
 var _ = BeforeEach(func() {
-	mockCtrl = gomock.NewController(GinkgoT())
-
 	garbageCollectIntervalOrig = garbageCollectInterval
 	maxUnusedDurationOrig = maxUnusedDuration
 	garbageCollectInterval = 50 * time.Millisecond
@@ -40,8 +36,6 @@ var _ = BeforeEach(func() {
 })
 
 var _ = AfterEach(func() {
-	mockCtrl.Finish()
-
 	garbageCollectInterval = garbageCollectIntervalOrig
 	maxUnusedDuration = maxUnusedDurationOrig
 	quicConfig = origQuicConfig
