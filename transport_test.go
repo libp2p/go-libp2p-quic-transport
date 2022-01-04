@@ -9,69 +9,91 @@ import (
 	"errors"
 	"io"
 	"net"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
-	"github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/lucas-clemente/quic-go"
 )
 
-var _ = Describe("Transport", func() {
-	var t tpt.Transport
+func getTransport(t *testing.T) tpt.Transport {
+	t.Helper()
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	key, err := ic.UnmarshalRsaPrivateKey(x509.MarshalPKCS1PrivateKey(rsaKey))
+	require.NoError(t, err)
+	tr, err := NewTransport(key, nil, nil)
+	require.NoError(t, err)
+	return tr
+}
 
-	BeforeEach(func() {
-		rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
-		Expect(err).ToNot(HaveOccurred())
-		key, err := ic.UnmarshalRsaPrivateKey(x509.MarshalPKCS1PrivateKey(rsaKey))
-		Expect(err).ToNot(HaveOccurred())
-		t, err = NewTransport(key, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
-	})
+func TestQUICProtocol(t *testing.T) {
+	tr := getTransport(t)
+	defer tr.(io.Closer).Close()
 
-	AfterEach(func() {
-		Expect(t.(io.Closer).Close()).To(Succeed())
-	})
+	protocols := tr.Protocols()
+	if len(protocols) != 1 {
+		t.Fatalf("expected to only support a single protocol, got %v", protocols)
+	}
+	if protocols[0] != ma.P_QUIC {
+		t.Fatalf("expected the supported protocol to be QUIC, got %d", protocols[0])
+	}
+}
 
-	It("says if it can dial an address", func() {
-		invalidAddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/1234")
-		Expect(err).ToNot(HaveOccurred())
-		validAddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/1234/quic")
-		Expect(err).ToNot(HaveOccurred())
-		Expect(t.CanDial(invalidAddr)).To(BeFalse())
-		Expect(t.CanDial(validAddr)).To(BeTrue())
-	})
+func TestCanDial(t *testing.T) {
+	tr := getTransport(t)
+	defer tr.(io.Closer).Close()
 
-	It("says that it cannot dial /dns addresses", func() {
-		addr, err := ma.NewMultiaddr("/dns/google.com/udp/443/quic")
-		Expect(err).ToNot(HaveOccurred())
-		Expect(t.CanDial(addr)).To(BeFalse())
-	})
-
-	It("supports the QUIC protocol", func() {
-		protocols := t.Protocols()
-		Expect(protocols).To(HaveLen(1))
-		Expect(protocols[0]).To(Equal(ma.P_QUIC))
-	})
-
-	It("uses a conn that can interface assert to a UDPConn for dialing", func() {
-		origQuicDialContext := quicDialContext
-		defer func() { quicDialContext = origQuicDialContext }()
-
-		var conn net.PacketConn
-		quicDialContext = func(_ context.Context, c net.PacketConn, _ net.Addr, _ string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
-			conn = c
-			return nil, errors.New("listen error")
+	invalid := []string{
+		"/ip4/127.0.0.1/udp/1234",
+		"/ip4/5.5.5.5/tcp/1234",
+		"/dns/google.com/udp/443/quic",
+	}
+	valid := []string{
+		"/ip4/127.0.0.1/udp/1234/quic",
+		"/ip4/5.5.5.5/udp/0/quic",
+	}
+	for _, s := range invalid {
+		invalidAddr, err := ma.NewMultiaddr(s)
+		require.NoError(t, err)
+		if tr.CanDial(invalidAddr) {
+			t.Errorf("didn't expect to be able to dial a non-quic address (%s)", invalidAddr)
 		}
-		remoteAddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
-		Expect(err).ToNot(HaveOccurred())
-		_, err = t.Dial(context.Background(), remoteAddr, "remote peer id")
-		Expect(err).To(MatchError("listen error"))
-		Expect(conn).ToNot(BeNil())
-		defer conn.Close()
-		_, ok := conn.(udpConn)
-		Expect(ok).To(BeTrue())
-	})
-})
+	}
+	for _, s := range valid {
+		validAddr, err := ma.NewMultiaddr(s)
+		require.NoError(t, err)
+		if !tr.CanDial(validAddr) {
+			t.Errorf("expected to be able to dial QUIC address (%s)", validAddr)
+		}
+	}
+}
+
+// The connection passed to quic-go needs to be type-assertable to a net.UDPConn,
+// in order to enable features like batch processing and ECN.
+func TestConnectionPassedToQUIC(t *testing.T) {
+	tr := getTransport(t)
+	defer tr.(io.Closer).Close()
+
+	origQuicDialContext := quicDialContext
+	defer func() { quicDialContext = origQuicDialContext }()
+
+	var conn net.PacketConn
+	quicDialContext = func(_ context.Context, c net.PacketConn, _ net.Addr, _ string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
+		conn = c
+		return nil, errors.New("listen error")
+	}
+	remoteAddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
+	require.NoError(t, err)
+	_, err = tr.Dial(context.Background(), remoteAddr, "remote peer id")
+	require.EqualError(t, err, "listen error")
+	require.NotNil(t, conn)
+	defer conn.Close()
+	if _, ok := conn.(quic.OOBCapablePacketConn); !ok {
+		t.Fatal("connection passed to quic-go cannot be type asserted to a *net.UDPConn")
+	}
+}

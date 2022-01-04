@@ -9,131 +9,106 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"syscall"
+	"testing"
+	"time"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
-	"github.com/lucas-clemente/quic-go"
 
+	"github.com/lucas-clemente/quic-go"
 	ma "github.com/multiformats/go-multiaddr"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/require"
 )
 
-// interface containing some methods defined on the net.UDPConn, but not the net.PacketConn
-type udpConn interface {
-	ReadFromUDP(b []byte) (int, *net.UDPAddr, error)
-	SetReadBuffer(bytes int) error
-	SyscallConn() (syscall.RawConn, error)
+func newTransport(t *testing.T) tpt.Transport {
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	key, err := ic.UnmarshalRsaPrivateKey(x509.MarshalPKCS1PrivateKey(rsaKey))
+	require.NoError(t, err)
+	tr, err := NewTransport(key, nil, nil)
+	require.NoError(t, err)
+	return tr
 }
 
-var _ = Describe("Listener", func() {
-	var t tpt.Transport
+// The conn passed to quic-go should be a conn that quic-go can be
+// type-asserted to a UDPConn. That way, it can use all kinds of optimizations.
+func TestConnUsedForListening(t *testing.T) {
+	origQuicListen := quicListen
+	t.Cleanup(func() { quicListen = origQuicListen })
 
-	BeforeEach(func() {
-		rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
-		Expect(err).ToNot(HaveOccurred())
-		key, err := ic.UnmarshalRsaPrivateKey(x509.MarshalPKCS1PrivateKey(rsaKey))
-		Expect(err).ToNot(HaveOccurred())
-		t, err = NewTransport(key, nil, nil)
-		Expect(err).ToNot(HaveOccurred())
+	var conn net.PacketConn
+	quicListen = func(c net.PacketConn, _ *tls.Config, _ *quic.Config) (quic.Listener, error) {
+		conn = c
+		return nil, errors.New("listen error")
+	}
+	localAddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
+	require.NoError(t, err)
+
+	tr := newTransport(t)
+	defer tr.(io.Closer).Close()
+	_, err = tr.Listen(localAddr)
+	require.EqualError(t, err, "listen error")
+	require.NotNil(t, conn)
+	defer conn.Close()
+	_, ok := conn.(quic.OOBCapablePacketConn)
+	require.True(t, ok)
+}
+
+func TestListenAddr(t *testing.T) {
+	tr := newTransport(t)
+	defer tr.(io.Closer).Close()
+
+	t.Run("for IPv4", func(t *testing.T) {
+		localAddr := ma.StringCast("/ip4/127.0.0.1/udp/0/quic")
+		ln, err := tr.Listen(localAddr)
+		require.NoError(t, err)
+		defer ln.Close()
+		port := ln.Addr().(*net.UDPAddr).Port
+		require.NotZero(t, port)
+		require.Equal(t, ln.Multiaddr().String(), fmt.Sprintf("/ip4/127.0.0.1/udp/%d/quic", port))
 	})
 
-	AfterEach(func() {
-		Expect(t.(io.Closer).Close()).To(Succeed())
+	t.Run("for IPv6", func(t *testing.T) {
+		localAddr := ma.StringCast("/ip6/::/udp/0/quic")
+		ln, err := tr.Listen(localAddr)
+		require.NoError(t, err)
+		defer ln.Close()
+		port := ln.Addr().(*net.UDPAddr).Port
+		require.NotZero(t, port)
+		require.Equal(t, ln.Multiaddr().String(), fmt.Sprintf("/ip6/::/udp/%d/quic", port))
 	})
+}
 
-	It("uses a conn that can interface assert to a UDPConn for listening", func() {
-		origQuicListen := quicListen
-		defer func() { quicListen = origQuicListen }()
+func TestAccepting(t *testing.T) {
+	tr := newTransport(t)
+	defer tr.(io.Closer).Close()
+	ln, err := tr.Listen(ma.StringCast("/ip4/127.0.0.1/udp/0/quic"))
+	require.NoError(t, err)
+	done := make(chan struct{})
+	go func() {
+		ln.Accept()
+		close(done)
+	}()
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-done:
+		t.Fatal("Accept didn't block")
+	default:
+	}
+	require.NoError(t, ln.Close())
+	select {
+	case <-done:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Accept didn't return after the listener was closed")
+	}
+}
 
-		var conn net.PacketConn
-		quicListen = func(c net.PacketConn, _ *tls.Config, _ *quic.Config) (quic.Listener, error) {
-			conn = c
-			return nil, errors.New("listen error")
-		}
-		localAddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
-		Expect(err).ToNot(HaveOccurred())
-		_, err = t.Listen(localAddr)
-		Expect(err).To(MatchError("listen error"))
-		Expect(conn).ToNot(BeNil())
-		defer conn.Close()
-		_, ok := conn.(udpConn)
-		Expect(ok).To(BeTrue())
-	})
-
-	Context("listening on the right address", func() {
-		It("returns the address it is listening on", func() {
-			localAddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
-			Expect(err).ToNot(HaveOccurred())
-			ln, err := t.Listen(localAddr)
-			Expect(err).ToNot(HaveOccurred())
-			defer ln.Close()
-			netAddr := ln.Addr()
-			Expect(netAddr).To(BeAssignableToTypeOf(&net.UDPAddr{}))
-			port := netAddr.(*net.UDPAddr).Port
-			Expect(port).ToNot(BeZero())
-			Expect(ln.Multiaddr().String()).To(Equal(fmt.Sprintf("/ip4/127.0.0.1/udp/%d/quic", port)))
-		})
-
-		It("returns the address it is listening on, for listening on IPv4", func() {
-			localAddr, err := ma.NewMultiaddr("/ip4/0.0.0.0/udp/0/quic")
-			Expect(err).ToNot(HaveOccurred())
-			ln, err := t.Listen(localAddr)
-			Expect(err).ToNot(HaveOccurred())
-			defer ln.Close()
-			netAddr := ln.Addr()
-			Expect(netAddr).To(BeAssignableToTypeOf(&net.UDPAddr{}))
-			port := netAddr.(*net.UDPAddr).Port
-			Expect(port).ToNot(BeZero())
-			Expect(ln.Multiaddr().String()).To(Equal(fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic", port)))
-		})
-
-		It("returns the address it is listening on, for listening on IPv6", func() {
-			localAddr, err := ma.NewMultiaddr("/ip6/::/udp/0/quic")
-			Expect(err).ToNot(HaveOccurred())
-			ln, err := t.Listen(localAddr)
-			Expect(err).ToNot(HaveOccurred())
-			defer ln.Close()
-			netAddr := ln.Addr()
-			Expect(netAddr).To(BeAssignableToTypeOf(&net.UDPAddr{}))
-			port := netAddr.(*net.UDPAddr).Port
-			Expect(port).ToNot(BeZero())
-			Expect(ln.Multiaddr().String()).To(Equal(fmt.Sprintf("/ip6/::/udp/%d/quic", port)))
-		})
-	})
-
-	Context("accepting connections", func() {
-		var localAddr ma.Multiaddr
-
-		BeforeEach(func() {
-			var err error
-			localAddr, err = ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
-			Expect(err).ToNot(HaveOccurred())
-		})
-
-		It("returns Accept when it is closed", func() {
-			addr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
-			Expect(err).ToNot(HaveOccurred())
-			ln, err := t.Listen(addr)
-			Expect(err).ToNot(HaveOccurred())
-			done := make(chan struct{})
-			go func() {
-				defer GinkgoRecover()
-				ln.Accept()
-				close(done)
-			}()
-			Consistently(done).ShouldNot(BeClosed())
-			Expect(ln.Close()).To(Succeed())
-			Eventually(done).Should(BeClosed())
-		})
-
-		It("doesn't accept Accept calls after it is closed", func() {
-			ln, err := t.Listen(localAddr)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(ln.Close()).To(Succeed())
-			_, err = ln.Accept()
-			Expect(err).To(HaveOccurred())
-		})
-	})
-})
+func TestAcceptAfterClose(t *testing.T) {
+	tr := newTransport(t)
+	defer tr.(io.Closer).Close()
+	ln, err := tr.Listen(ma.StringCast("/ip4/127.0.0.1/udp/0/quic"))
+	require.NoError(t, err)
+	require.NoError(t, ln.Close())
+	_, err = ln.Accept()
+	require.Error(t, err)
+}
