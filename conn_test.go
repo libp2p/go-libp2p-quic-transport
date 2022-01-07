@@ -353,12 +353,14 @@ func TestStatelessReset(t *testing.T) {
 	require.NoError(t, err)
 	conn, err := clientTransport.Dial(context.Background(), proxyAddr, serverID)
 	require.NoError(t, err)
+	connChan := make(chan tpt.CapableConn)
 	go func() {
 		conn, err := ln.Accept()
 		require.NoError(t, err)
 		str, err := conn.OpenStream(context.Background())
 		require.NoError(t, err)
 		str.Write([]byte("foobar"))
+		connChan <- conn
 	}()
 
 	str, err := conn.AcceptStream()
@@ -370,6 +372,7 @@ func TestStatelessReset(t *testing.T) {
 	// This prevents the CONNECTION_CLOSE from reaching the client.
 	atomic.StoreUint32(&drop, 1)
 	ln.Close()
+	(<-connChan).Close()
 	// require.NoError(t, ln.Close())
 	time.Sleep(2000 * time.Millisecond) // give the kernel some time to free the UDP port
 	ln = runServer(t, serverTransport, fmt.Sprintf("/ip4/127.0.0.1/udp/%d/quic", serverPort))
