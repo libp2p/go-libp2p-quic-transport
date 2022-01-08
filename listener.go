@@ -102,19 +102,18 @@ func (l *listener) setupConn(sess quic.Session) (*conn, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	remotePeerID, err := peer.IDFromPublicKey(remotePubKey)
 	if err != nil {
 		return nil, err
 	}
-
 	remoteMultiaddr, err := toQuicMultiaddr(sess.RemoteAddr())
 	if err != nil {
 		return nil, err
 	}
-
+	l.conn.IncreaseCount()
 	return &conn{
 		sess:            sess,
+		pconn:           l.conn,
 		transport:       l.transport,
 		localPeer:       l.localPeer,
 		localMultiaddr:  l.localMultiaddr,
