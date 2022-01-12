@@ -398,9 +398,7 @@ func TestHolePunching(t *testing.T) {
 	t1, err := NewTransport(serverKey, nil, nil)
 	require.NoError(t, err)
 	defer t1.(io.Closer).Close()
-	laddr, err := ma.NewMultiaddr("/ip4/127.0.0.1/udp/0/quic")
-	require.NoError(t, err)
-	ln1, err := t1.Listen(laddr)
+	ln1, err := t1.Listen(ma.StringCast("/ip4/127.0.0.1/udp/10001/quic"))
 	require.NoError(t, err)
 	done1 := make(chan struct{})
 	go func() {
@@ -412,7 +410,7 @@ func TestHolePunching(t *testing.T) {
 	t2, err := NewTransport(clientKey, nil, nil)
 	require.NoError(t, err)
 	defer t2.(io.Closer).Close()
-	ln2, err := t2.Listen(laddr)
+	ln2, err := t2.Listen(ma.StringCast("/ip4/127.0.0.1/udp/10002/quic"))
 	require.NoError(t, err)
 	done2 := make(chan struct{})
 	go func() {
@@ -422,11 +420,13 @@ func TestHolePunching(t *testing.T) {
 	}()
 	connChan := make(chan tpt.CapableConn)
 	go func() {
+		fmt.Println("dialing", ln1.Multiaddr())
 		conn, err := t2.Dial(
 			n.WithSimultaneousConnect(context.Background(), false, ""),
 			ln1.Multiaddr(),
 			serverID,
 		)
+		fmt.Println(conn, err)
 		require.NoError(t, err)
 		connChan <- conn
 	}()
@@ -439,14 +439,11 @@ func TestHolePunching(t *testing.T) {
 	defer conn1.Close()
 	require.Equal(t, conn1.RemotePeer(), clientID)
 	var conn2 tpt.CapableConn
-	require.Eventually(t, func() bool {
-		select {
-		case conn2 = <-connChan:
-			return true
-		default:
-			return false
-		}
-	}, 100*time.Millisecond, 10*time.Millisecond)
+	select {
+	case conn2 = <-connChan:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("didn't receive hole punched connection")
+	}
 	defer conn2.Close()
 	require.Equal(t, conn2.RemotePeer(), serverID)
 	ln1.Close()

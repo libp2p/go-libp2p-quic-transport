@@ -1,6 +1,7 @@
 package libp2pquic
 
 import (
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -68,6 +69,8 @@ func newReuse() *reuse {
 		closeChan:  make(chan struct{}),
 		gcStopChan: make(chan struct{}),
 	}
+	// routes, _ := netroute.New()
+	// r.routes = routes
 	go r.gc()
 	return r
 }
@@ -146,6 +149,8 @@ func (r *reuse) Dial(network string, raddr *net.UDPAddr) (*reuseConn, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
+	fmt.Printf("IP for %s: %s\n", raddr, ip)
+
 	conn, err := r.dialLocked(network, ip)
 	if err != nil {
 		return nil, err
@@ -158,6 +163,7 @@ func (r *reuse) dialLocked(network string, source *net.IP) (*reuseConn, error) {
 	if source != nil {
 		// We already have at least one suitable connection...
 		if conns, ok := r.unicast[source.String()]; ok {
+			fmt.Println("using unicast")
 			// ... we don't care which port we're dialing from. Just use the first.
 			for _, c := range conns {
 				return c, nil
@@ -168,6 +174,7 @@ func (r *reuse) dialLocked(network string, source *net.IP) (*reuseConn, error) {
 	// Use a connection listening on 0.0.0.0 (or ::).
 	// Again, we don't care about the port number.
 	for _, conn := range r.global {
+		fmt.Println("using global")
 		return conn, nil
 	}
 
@@ -180,6 +187,7 @@ func (r *reuse) dialLocked(network string, source *net.IP) (*reuseConn, error) {
 	case "udp6":
 		addr = &net.UDPAddr{IP: net.IPv6zero, Port: 0}
 	}
+	fmt.Println("starting new listener")
 	conn, err := net.ListenUDP(network, addr)
 	if err != nil {
 		return nil, err
@@ -204,6 +212,7 @@ func (r *reuse) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
 
 	// Deal with listen on a global address
 	if localAddr.IP.IsUnspecified() {
+		fmt.Println("listening on global")
 		// The kernel already checked that the laddr is not already listen
 		// so we need not check here (when we create ListenUDP).
 		r.global[localAddr.Port] = rconn
@@ -212,6 +221,7 @@ func (r *reuse) Listen(network string, laddr *net.UDPAddr) (*reuseConn, error) {
 
 	// Deal with listen on a unicast address
 	if _, ok := r.unicast[localAddr.IP.String()]; !ok {
+		fmt.Println("listening on new unicast")
 		r.unicast[localAddr.IP.String()] = make(map[int]*reuseConn)
 		// Assume the system's routes may have changed if we're adding a new listener.
 		// Ignore the error, there's nothing we can do.

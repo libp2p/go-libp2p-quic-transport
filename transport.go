@@ -192,6 +192,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("dialing on %s <--> %s\n", pconn.LocalAddr(), raddr)
 	sess, err := quicDialContext(ctx, pconn, addr, host, tlsConf, t.clientConfig)
 	if err != nil {
 		pconn.DecreaseCount()
@@ -232,6 +233,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 }
 
 func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDPAddr, p peer.ID) (tpt.CapableConn, error) {
+	fmt.Println("holepunch", addr)
 	pconn, err := t.connManager.Dial(network, addr)
 	if err != nil {
 		return nil, err
@@ -242,6 +244,7 @@ func (t *transport) holePunch(ctx context.Context, network string, addr *net.UDP
 	defer cancel()
 
 	key := holePunchKey{addr: addr.String(), peer: p}
+	fmt.Printf("key: %#v\n", key)
 	t.holePunchingMx.Lock()
 	if _, ok := t.holePunching[key]; ok {
 		t.holePunchingMx.Unlock()

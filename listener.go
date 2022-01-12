@@ -3,6 +3,7 @@ package libp2pquic
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net"
 
 	ic "github.com/libp2p/go-libp2p-core/crypto"
@@ -65,6 +66,7 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 		if err != nil {
 			return nil, err
 		}
+		fmt.Println("accepted from", sess.RemoteAddr())
 		conn, err := l.setupConn(sess)
 		if err != nil {
 			sess.CloseWithError(0, err.Error())
@@ -77,6 +79,7 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 
 		// return through active hole punching if any
 		key := holePunchKey{addr: sess.RemoteAddr().String(), peer: conn.remotePeerID}
+		fmt.Printf("listener key: %#v\n", key)
 		var wasHolePunch bool
 		l.transport.holePunchingMx.Lock()
 		holePunch, ok := l.transport.holePunching[key]
