@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	mrand "math/rand"
 	"net"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	n "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	tpt "github.com/libp2p/go-libp2p-core/transport"
+	"github.com/libp2p/go-netroute"
 	quicproxy "github.com/lucas-clemente/quic-go/integrationtests/tools/proxy"
 	ma "github.com/multiformats/go-multiaddr"
 
@@ -393,7 +395,6 @@ func TestStatelessReset(t *testing.T) {
 
 func TestHolePunching(t *testing.T) {
 	serverID, serverKey := createPeer(t)
-	clientID, clientKey := createPeer(t)
 
 	t1, err := NewTransport(serverKey, nil, nil)
 	require.NoError(t, err)
@@ -402,6 +403,20 @@ func TestHolePunching(t *testing.T) {
 	require.NoError(t, err)
 	ln1, err := t1.Listen(laddr)
 	require.NoError(t, err)
+
+	if runtime.GOOS != "linux" {
+		// On OSX, netroute might not return 127.0.0.1 as the route to dial 127.0.0.1.
+		// We'll then get a mismatch in the hole punch keys, and holepunching will fail.
+		r, err := netroute.New()
+		require.NoError(t, err)
+		localhost := net.IPv4(127, 0, 0, 1)
+		_, _, src, err := r.Route(localhost)
+		require.NoError(t, err)
+		if !src.Equal(net.IPv4(127, 0, 0, 1)) {
+			t.Skipf("netroute didn't return a 127.0.0.1 route, got %s instead", src)
+		}
+	}
+
 	done1 := make(chan struct{})
 	go func() {
 		defer close(done1)
@@ -409,6 +424,7 @@ func TestHolePunching(t *testing.T) {
 		require.Error(t, err, "didn't expect to accept any connections")
 	}()
 
+	clientID, clientKey := createPeer(t)
 	t2, err := NewTransport(clientKey, nil, nil)
 	require.NoError(t, err)
 	defer t2.(io.Closer).Close()
