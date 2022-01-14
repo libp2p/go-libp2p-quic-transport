@@ -15,7 +15,7 @@ import (
 type conn struct {
 	sess      quic.Session
 	pconn     *reuseConn
-	transport tpt.Transport
+	transport *transport
 	scope     network.ConnManagementScope
 
 	localPeer      peer.ID
@@ -33,6 +33,7 @@ var _ tpt.CapableConn = &conn{}
 // It must be called even if the peer closed the connection in order for
 // garbage collection to properly work in this package.
 func (c *conn) Close() error {
+	c.transport.removeConn(c.sess)
 	err := c.sess.CloseWithError(0, "")
 	c.pconn.DecreaseCount()
 	c.scope.Done()
@@ -42,6 +43,10 @@ func (c *conn) Close() error {
 // IsClosed returns whether a connection is fully closed.
 func (c *conn) IsClosed() bool {
 	return c.sess.Context().Err() != nil
+}
+
+func (c *conn) allowWindowIncrease(size uint64) bool {
+	return c.scope.ReserveMemory(int(size), network.ReservationPriorityMedium) == nil
 }
 
 // OpenStream creates a new stream.

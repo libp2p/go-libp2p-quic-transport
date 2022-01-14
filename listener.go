@@ -67,24 +67,25 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 		if err != nil {
 			return nil, err
 		}
-		conn, err := l.setupConn(sess)
+		c, err := l.setupConn(sess)
 		if err != nil {
 			sess.CloseWithError(0, err.Error())
 			continue
 		}
-		if l.transport.gater != nil && !(l.transport.gater.InterceptAccept(conn) && l.transport.gater.InterceptSecured(network.DirInbound, conn.remotePeerID, conn)) {
-			conn.scope.Done()
+		if l.transport.gater != nil && !(l.transport.gater.InterceptAccept(c) && l.transport.gater.InterceptSecured(network.DirInbound, c.remotePeerID, c)) {
+			c.scope.Done()
 			sess.CloseWithError(errorCodeConnectionGating, "connection gated")
 			continue
 		}
+		l.transport.addConn(sess, c)
 
 		// return through active hole punching if any
-		key := holePunchKey{addr: sess.RemoteAddr().String(), peer: conn.remotePeerID}
+		key := holePunchKey{addr: sess.RemoteAddr().String(), peer: c.remotePeerID}
 		var wasHolePunch bool
 		l.transport.holePunchingMx.Lock()
 		holePunch, ok := l.transport.holePunching[key]
 		if ok && !holePunch.fulfilled {
-			holePunch.connCh <- conn
+			holePunch.connCh <- c
 			wasHolePunch = true
 			holePunch.fulfilled = true
 		}
@@ -92,7 +93,7 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 		if wasHolePunch {
 			continue
 		}
-		return conn, nil
+		return c, nil
 	}
 }
 
