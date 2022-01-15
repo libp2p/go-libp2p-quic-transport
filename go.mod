@@ -4,12 +4,12 @@ go 1.16
 
 require (
 	github.com/golang/mock v1.6.0
-	github.com/google/gopacket v1.1.17
+	github.com/google/gopacket v1.1.19
 	github.com/ipfs/go-log/v2 v2.5.0
 	github.com/klauspost/compress v1.13.6
 	github.com/libp2p/go-libp2p-core v0.10.0
 	github.com/libp2p/go-libp2p-tls v0.3.0
-	github.com/libp2p/go-netroute v0.1.3
+	github.com/libp2p/go-netroute v0.2.0
 	github.com/lucas-clemente/quic-go v0.24.0
 	github.com/minio/sha256-simd v0.1.1
 	github.com/multiformats/go-multiaddr v0.3.1
