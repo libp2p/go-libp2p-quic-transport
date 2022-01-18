@@ -38,7 +38,7 @@ func run(port string) error {
 		return err
 	}
 
-	t, err := libp2pquic.NewTransport(priv, nil, nil)
+	t, err := libp2pquic.NewTransport(priv, nil, nil, nil)
 	if err != nil {
 		return err
 	}
