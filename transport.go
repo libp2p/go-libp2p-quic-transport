@@ -381,7 +381,9 @@ func (t *transport) allowWindowIncrease(sess quic.Session, size uint64) bool {
 	// into our connections map (which we do right after dialing / accepting it),
 	// we have no way to account for that memory. This should be very rare.
 	// Block this attempt. The session can request more memory later.
+	t.connMx.Lock()
 	c, ok := t.conns[sess]
+	t.connMx.Unlock()
 	if !ok {
 		return false
 	}
