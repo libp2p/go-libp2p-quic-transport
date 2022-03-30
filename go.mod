@@ -11,7 +11,7 @@ require (
 	github.com/libp2p/go-libp2p-testing v0.7.0
 	github.com/libp2p/go-libp2p-tls v0.3.0
 	github.com/libp2p/go-netroute v0.2.0
-	github.com/lucas-clemente/quic-go v0.26.0
+	github.com/lucas-clemente/quic-go v0.27.0
 	github.com/minio/sha256-simd v0.1.1
 	github.com/multiformats/go-multiaddr v0.4.1
 	github.com/multiformats/go-multiaddr-fmt v0.1.0
