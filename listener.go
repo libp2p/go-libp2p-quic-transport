@@ -63,24 +63,24 @@ func newListener(rconn *reuseConn, t *transport, localPeer peer.ID, key ic.PrivK
 // Accept accepts new connections.
 func (l *listener) Accept() (tpt.CapableConn, error) {
 	for {
-		sess, err := l.quicListener.Accept(context.Background())
+		qconn, err := l.quicListener.Accept(context.Background())
 		if err != nil {
 			return nil, err
 		}
-		c, err := l.setupConn(sess)
+		c, err := l.setupConn(qconn)
 		if err != nil {
-			sess.CloseWithError(0, err.Error())
+			qconn.CloseWithError(0, err.Error())
 			continue
 		}
 		if l.transport.gater != nil && !(l.transport.gater.InterceptAccept(c) && l.transport.gater.InterceptSecured(network.DirInbound, c.remotePeerID, c)) {
 			c.scope.Done()
-			sess.CloseWithError(errorCodeConnectionGating, "connection gated")
+			qconn.CloseWithError(errorCodeConnectionGating, "connection gated")
 			continue
 		}
-		l.transport.addConn(sess, c)
+		l.transport.addConn(qconn, c)
 
 		// return through active hole punching if any
-		key := holePunchKey{addr: sess.RemoteAddr().String(), peer: c.remotePeerID}
+		key := holePunchKey{addr: qconn.RemoteAddr().String(), peer: c.remotePeerID}
 		var wasHolePunch bool
 		l.transport.holePunchingMx.Lock()
 		holePunch, ok := l.transport.holePunching[key]
@@ -97,17 +97,17 @@ func (l *listener) Accept() (tpt.CapableConn, error) {
 	}
 }
 
-func (l *listener) setupConn(sess quic.Session) (*conn, error) {
+func (l *listener) setupConn(qconn quic.Connection) (*conn, error) {
 	connScope, err := l.rcmgr.OpenConnection(network.DirInbound, false)
 	if err != nil {
-		log.Debugw("resource manager blocked incoming connection", "addr", sess.RemoteAddr(), "error", err)
+		log.Debugw("resource manager blocked incoming connection", "addr", qconn.RemoteAddr(), "error", err)
 		return nil, err
 	}
 	// The tls.Config used to establish this connection already verified the certificate chain.
 	// Since we don't have any way of knowing which tls.Config was used though,
 	// we have to re-determine the peer's identity here.
 	// Therefore, this is expected to never fail.
-	remotePubKey, err := p2ptls.PubKeyFromCertChain(sess.ConnectionState().TLS.PeerCertificates)
+	remotePubKey, err := p2ptls.PubKeyFromCertChain(qconn.ConnectionState().TLS.PeerCertificates)
 	if err != nil {
 		connScope.Done()
 		return nil, err
@@ -118,11 +118,11 @@ func (l *listener) setupConn(sess quic.Session) (*conn, error) {
 		return nil, err
 	}
 	if err := connScope.SetPeer(remotePeerID); err != nil {
-		log.Debugw("resource manager blocked incoming connection for peer", "peer", remotePeerID, "addr", sess.RemoteAddr(), "error", err)
+		log.Debugw("resource manager blocked incoming connection for peer", "peer", remotePeerID, "addr", qconn.RemoteAddr(), "error", err)
 		connScope.Done()
 		return nil, err
 	}
-	remoteMultiaddr, err := toQuicMultiaddr(sess.RemoteAddr())
+	remoteMultiaddr, err := toQuicMultiaddr(qconn.RemoteAddr())
 	if err != nil {
 		connScope.Done()
 		return nil, err
@@ -130,7 +130,7 @@ func (l *listener) setupConn(sess quic.Session) (*conn, error) {
 
 	l.conn.IncreaseCount()
 	return &conn{
-		sess:            sess,
+		quicConn:        qconn,
 		pconn:           l.conn,
 		transport:       l.transport,
 		scope:           connScope,

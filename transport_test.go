@@ -83,7 +83,7 @@ func TestConnectionPassedToQUIC(t *testing.T) {
 	defer func() { quicDialContext = origQuicDialContext }()
 
 	var conn net.PacketConn
-	quicDialContext = func(_ context.Context, c net.PacketConn, _ net.Addr, _ string, _ *tls.Config, _ *quic.Config) (quic.Session, error) {
+	quicDialContext = func(_ context.Context, c net.PacketConn, _ net.Addr, _ string, _ *tls.Config, _ *quic.Config) (quic.Connection, error) {
 		conn = c
 		return nil, errors.New("listen error")
 	}

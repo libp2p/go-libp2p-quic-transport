@@ -13,7 +13,7 @@ import (
 )
 
 type conn struct {
-	sess      quic.Session
+	quicConn  quic.Connection
 	pconn     *reuseConn
 	transport *transport
 	scope     network.ConnManagementScope
@@ -33,8 +33,8 @@ var _ tpt.CapableConn = &conn{}
 // It must be called even if the peer closed the connection in order for
 // garbage collection to properly work in this package.
 func (c *conn) Close() error {
-	c.transport.removeConn(c.sess)
-	err := c.sess.CloseWithError(0, "")
+	c.transport.removeConn(c.quicConn)
+	err := c.quicConn.CloseWithError(0, "")
 	c.pconn.DecreaseCount()
 	c.scope.Done()
 	return err
@@ -42,7 +42,7 @@ func (c *conn) Close() error {
 
 // IsClosed returns whether a connection is fully closed.
 func (c *conn) IsClosed() bool {
-	return c.sess.Context().Err() != nil
+	return c.quicConn.Context().Err() != nil
 }
 
 func (c *conn) allowWindowIncrease(size uint64) bool {
@@ -51,13 +51,13 @@ func (c *conn) allowWindowIncrease(size uint64) bool {
 
 // OpenStream creates a new stream.
 func (c *conn) OpenStream(ctx context.Context) (network.MuxedStream, error) {
-	qstr, err := c.sess.OpenStreamSync(ctx)
+	qstr, err := c.quicConn.OpenStreamSync(ctx)
 	return &stream{Stream: qstr}, err
 }
 
 // AcceptStream accepts a stream opened by the other side.
 func (c *conn) AcceptStream() (network.MuxedStream, error) {
-	qstr, err := c.sess.AcceptStream(context.Background())
+	qstr, err := c.quicConn.AcceptStream(context.Background())
 	return &stream{Stream: qstr}, err
 }
 

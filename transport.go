@@ -118,7 +118,7 @@ type transport struct {
 	holePunching   map[holePunchKey]*activeHolePunch
 
 	connMx sync.Mutex
-	conns  map[quic.Session]*conn
+	conns  map[quic.Connection]*conn
 }
 
 var _ tpt.Transport = &transport{}
@@ -173,7 +173,7 @@ func NewTransport(key ic.PrivKey, psk pnet.PSK, gater connmgr.ConnectionGater, r
 		connManager:  connManager,
 		gater:        gater,
 		rcmgr:        rcmgr,
-		conns:        make(map[quic.Session]*conn),
+		conns:        make(map[quic.Connection]*conn),
 		holePunching: make(map[holePunchKey]*activeHolePunch),
 	}
 	config.AllowConnectionWindowIncrease = tr.allowWindowIncrease
@@ -215,7 +215,7 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 	if err != nil {
 		return nil, err
 	}
-	sess, err := quicDialContext(ctx, pconn, addr, host, tlsConf, t.clientConfig)
+	qconn, err := quicDialContext(ctx, pconn, addr, host, tlsConf, t.clientConfig)
 	if err != nil {
 		scope.Done()
 		pconn.DecreaseCount()
@@ -235,11 +235,11 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 
 	localMultiaddr, err := toQuicMultiaddr(pconn.LocalAddr())
 	if err != nil {
-		sess.CloseWithError(0, "")
+		qconn.CloseWithError(0, "")
 		return nil, err
 	}
 	c := &conn{
-		sess:            sess,
+		quicConn:        qconn,
 		pconn:           pconn,
 		transport:       t,
 		scope:           scope,
@@ -251,22 +251,22 @@ func (t *transport) Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (tp
 		remoteMultiaddr: remoteMultiaddr,
 	}
 	if t.gater != nil && !t.gater.InterceptSecured(network.DirOutbound, p, c) {
-		sess.CloseWithError(errorCodeConnectionGating, "connection gated")
+		qconn.CloseWithError(errorCodeConnectionGating, "connection gated")
 		return nil, fmt.Errorf("secured connection gated")
 	}
-	t.addConn(sess, c)
+	t.addConn(qconn, c)
 	return c, nil
 }
 
-func (t *transport) addConn(sess quic.Session, c *conn) {
+func (t *transport) addConn(conn quic.Connection, c *conn) {
 	t.connMx.Lock()
-	t.conns[sess] = c
+	t.conns[conn] = c
 	t.connMx.Unlock()
 }
 
-func (t *transport) removeConn(sess quic.Session) {
+func (t *transport) removeConn(conn quic.Connection) {
 	t.connMx.Lock()
-	delete(t.conns, sess)
+	delete(t.conns, conn)
 	t.connMx.Unlock()
 }
 
@@ -376,13 +376,13 @@ func (t *transport) Listen(addr ma.Multiaddr) (tpt.Listener, error) {
 	return ln, nil
 }
 
-func (t *transport) allowWindowIncrease(sess quic.Session, size uint64) bool {
-	// If the QUIC session tries to increase the window before we've inserted it
+func (t *transport) allowWindowIncrease(conn quic.Connection, size uint64) bool {
+	// If the QUIC connection tries to increase the window before we've inserted it
 	// into our connections map (which we do right after dialing / accepting it),
 	// we have no way to account for that memory. This should be very rare.
-	// Block this attempt. The session can request more memory later.
+	// Block this attempt. The connection can request more memory later.
 	t.connMx.Lock()
-	c, ok := t.conns[sess]
+	c, ok := t.conns[conn]
 	t.connMx.Unlock()
 	if !ok {
 		return false
