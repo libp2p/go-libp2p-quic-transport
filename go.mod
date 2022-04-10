@@ -8,7 +8,7 @@ require (
 	github.com/ipfs/go-log/v2 v2.5.0
 	github.com/klauspost/compress v1.13.6
 	github.com/libp2p/go-libp2p-core v0.14.0
-	github.com/libp2p/go-libp2p-testing v0.9.0
+	github.com/libp2p/go-libp2p-testing v0.9.2
 	github.com/libp2p/go-libp2p-tls v0.3.0
 	github.com/libp2p/go-netroute v0.2.0
 	github.com/lucas-clemente/quic-go v0.27.0
